@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { signOut } from './actions'
-import { MarketIcon, LaundryIcon } from '@/components/icons'
+import { MarketIcon } from '@/components/icons'
 
 export default async function Home() {
   const supabase = createClient()
@@ -36,10 +36,12 @@ export default async function Home() {
           <MarketIcon />
           <span>Marketplace</span>
         </Link>
+        {/* Laundry Booking hidden for now — re-add this card when the module is ready:
         <Link href="/laundry" className="module-card">
           <LaundryIcon />
           <span>Laundry Booking</span>
         </Link>
+        */}
       </div>
     </main>
   )
