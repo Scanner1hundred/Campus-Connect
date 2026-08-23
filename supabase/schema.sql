@@ -1,473 +1,172 @@
--- Run this in the Supabase SQL Editor for your project.
+-- =======================================================
+-- STUDENT MARKETPLACE & STUDENT CENTRE DATABASE SCHEMA
+-- Generated to match ERD (Crow's Foot Notation)
+-- Target: Supabase (PostgreSQL)
+-- =======================================================
 
--- Shared profiles table (used by both Marketplace and Laundry modules)
-create table if not exists profiles (
-  id uuid references auth.users(id) on delete cascade primary key,
-  full_name text,
-  student_number text,
-  phone text,
-  updated_at timestamp with time zone default now()
+-- Enable UUID extension
+create extension if not exists pgcrypto;
+
+-- 0. ENUM TYPES (As seen in your GitHub schema)
+create type listing_status as enum ('active', 'sold', 'inactive', 'pending', 'removed');
+create type order_status as enum ('pending', 'confirmed', 'shipped', 'completed', 'cancelled', 'refunded');
+create type payment_method as enum ('card', 'eft', 'cash', 'mobile_money', 'other');
+create type payment_status as enum ('pending', 'completed', 'failed', 'refunded');
+create type notification_type as enum ('message', 'order', 'payment', 'review', 'favorite', 'system');
+
+-- 1. ROLES
+CREATE TABLE IF NOT EXISTS roles (
+    role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    role_name VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT
 );
 
--- Row Level Security: each student can only read/write their own profile
-alter table profiles enable row level security;
-
-create policy "Users can view own profile"
-  on profiles for select
-  using (auth.uid() = id);
-
-create policy "Users can insert own profile"
-  on profiles for insert
-  with check (auth.uid() = id);
-
-create policy "Users can update own profile"
-  on profiles for update
-  using (auth.uid() = id);
-
--- =====================================================
--- MARKETPLACE CATEGORIES
--- =====================================================
-
-create table if not exists marketplace_categories (
-    category_id uuid primary key default gen_random_uuid(),
-    category_name text not null unique,
-    description text,
-    created_at timestamp with time zone default now()
+-- 2. USERS
+CREATE TABLE IF NOT EXISTS users (
+    user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role_id UUID REFERENCES roles(role_id) ON DELETE SET NULL,
+    is_active BOOLEAN DEFAULT true,
+    last_login TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- =====================================================
--- MARKETPLACE ITEMS
--- =====================================================
-
-create table if not exists marketplace_items (
-    item_id uuid primary key default gen_random_uuid(),
-
-    category_id uuid not null
-        references marketplace_categories(category_id)
-        on delete restrict,
-
-    item_name text not null,
-    brand text,
-    model text,
-    item_condition text,
-    description text,
-
-    created_at timestamp with time zone default now()
+-- 3. PROFILES
+CREATE TABLE IF NOT EXISTS profiles (
+    user_id UUID PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    full_name VARCHAR(255),
+    student_number VARCHAR(100) UNIQUE,
+    phone_number VARCHAR(50),
+    profile_image_url TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- =====================================================
--- MARKETPLACE LISTINGS
--- =====================================================
-
-create table if not exists marketplace_listings (
-    listing_id uuid primary key default gen_random_uuid(),
-
-    item_id uuid not null
-        references marketplace_items(item_id)
-        on delete cascade,
-
-    seller_id uuid not null
-        references profiles(id)
-        on delete cascade,
-
-    listing_type text not null
-        check (listing_type in ('Sale', 'Rent', 'Both')),
-
-    sale_price numeric(12,2)
-        check (sale_price is null or sale_price >= 0),
-
-    rental_price_per_day numeric(12,2)
-        check (
-            rental_price_per_day is null
-            or rental_price_per_day >= 0
-        ),
-
-    deposit_amount numeric(12,2) default 0
-        check (deposit_amount >= 0),
-
-    listing_status text not null default 'Available'
-        check (
-            listing_status in (
-                'Available',
-                'Sold',
-                'Rented',
-                'Unavailable',
-                'Removed'
-            )
-        ),
-
-    created_at timestamp with time zone default now()
+-- 4. CATEGORIES
+CREATE TABLE IF NOT EXISTS categories (
+    category_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category_name VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    icon_url TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- =====================================================
--- MARKETPLACE ORDERS
--- =====================================================
-
-create table if not exists marketplace_orders (
-    marketplace_order_id uuid primary key default gen_random_uuid(),
-
-    buyer_id uuid not null
-        references profiles(id)
-        on delete restrict,
-
-    seller_id uuid not null
-        references profiles(id)
-        on delete restrict,
-
-    order_date timestamp with time zone default now(),
-
-    total_amount numeric(12,2) not null default 0
-        check (total_amount >= 0),
-
-    order_status text not null default 'Pending'
-        check (
-            order_status in (
-                'Pending',
-                'Confirmed',
-                'Completed',
-                'Cancelled'
-            )
-        )
+-- 5. SUBCATEGORIES
+CREATE TABLE IF NOT EXISTS subcategories (
+    sub_category_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category_id UUID REFERENCES categories(category_id) ON DELETE CASCADE,
+    sub_category_name VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- =====================================================
--- MARKETPLACE ORDER ITEMS
--- =====================================================
-
-create table if not exists marketplace_order_items (
-    marketplace_order_item_id uuid primary key default gen_random_uuid(),
-
-    marketplace_order_id uuid not null
-        references marketplace_orders(marketplace_order_id)
-        on delete cascade,
-
-    listing_id uuid not null
-        references marketplace_listings(listing_id)
-        on delete restrict,
-
-    quantity integer not null default 1
-        check (quantity > 0),
-
-    unit_price numeric(12,2) not null
-        check (unit_price >= 0),
-
-    subtotal numeric(12,2)
-        generated always as (quantity * unit_price) stored
+-- 6. LISTINGS
+CREATE TABLE IF NOT EXISTS listings (
+    listing_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+    sub_category_id UUID REFERENCES subcategories(sub_category_id) ON DELETE SET NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    condition VARCHAR(50), 
+    price DECIMAL(10, 2) NOT NULL,
+    status listing_status DEFAULT 'active', -- Uses your custom ENUM
+    views_count INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- =====================================================
--- MARKETPLACE RENTALS
--- =====================================================
-
-create table if not exists marketplace_rentals (
-    rental_id uuid primary key default gen_random_uuid(),
-
-    listing_id uuid not null
-        references marketplace_listings(listing_id)
-        on delete restrict,
-
-    renter_id uuid not null
-        references profiles(id)
-        on delete restrict,
-
-    owner_id uuid not null
-        references profiles(id)
-        on delete restrict,
-
-    start_date date not null,
-
-    expected_return_date date not null,
-
-    actual_return_date date,
-
-    rental_price_per_day numeric(12,2) not null
-        check (rental_price_per_day >= 0),
-
-    total_rental_cost numeric(12,2)
-        check (total_rental_cost >= 0),
-
-    deposit_amount numeric(12,2) default 0
-        check (deposit_amount >= 0),
-
-    rental_status text not null default 'Pending'
-        check (
-            rental_status in (
-                'Pending',
-                'Active',
-                'Returned',
-                'Late',
-                'Cancelled'
-            )
-        ),
-
-    check (expected_return_date >= start_date)
+-- 7. LISTING_IMAGES
+CREATE TABLE IF NOT EXISTS listing_images (
+    image_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    listing_id UUID REFERENCES listings(listing_id) ON DELETE CASCADE,
+    image_url TEXT NOT NULL,
+    is_primary BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- =====================================================
--- PAYMENTS
--- =====================================================
-
-create table if not exists marketplace_payments (
-    payment_id uuid primary key default gen_random_uuid(),
-
-    marketplace_order_id uuid
-        references marketplace_orders(marketplace_order_id)
-        on delete cascade,
-
-    rental_id uuid
-        references marketplace_rentals(rental_id)
-        on delete cascade,
-
-    amount numeric(12,2) not null
-        check (amount >= 0),
-
-    payment_method text not null
-        check (
-            payment_method in (
-                'Cash',
-                'Card',
-                'EFT',
-                'Online'
-            )
-        ),
-
-    payment_status text not null default 'Pending'
-        check (
-            payment_status in (
-                'Pending',
-                'Paid',
-                'Failed',
-                'Refunded'
-            )
-        ),
-
-    payment_date timestamp with time zone default now(),
-
-    check (
-        marketplace_order_id is not null
-        or rental_id is not null
-    )
+-- 8. FAVORITES
+CREATE TABLE IF NOT EXISTS favorites (
+    favorite_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+    listing_id UUID REFERENCES listings(listing_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_user_favorite UNIQUE(user_id, listing_id)
 );
 
--- =====================================================
--- MARKETPLACE REVIEWS
--- =====================================================
-
-create table if not exists marketplace_reviews (
-    review_id uuid primary key default gen_random_uuid(),
-
-    reviewer_id uuid not null
-        references profiles(id)
-        on delete cascade,
-
-    listing_id uuid
-        references marketplace_listings(listing_id)
-        on delete cascade,
-
-    seller_id uuid
-        references profiles(id)
-        on delete cascade,
-
-    rating integer not null
-        check (rating between 1 and 5),
-
-    review_comment text,
-
-    review_date timestamp with time zone default now()
+-- 9. ORDERS
+CREATE TABLE IF NOT EXISTS orders (
+    order_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    seller_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(10, 2) NOT NULL,
+    status order_status DEFAULT 'pending' -- Uses your custom ENUM
 );
 
--- =====================================================
--- MARKETPLACE ITEM IMAGES
--- =====================================================
-
-create table if not exists marketplace_item_images (
-    image_id uuid primary key default gen_random_uuid(),
-
-    item_id uuid not null
-        references marketplace_items(item_id)
-        on delete cascade,
-
-    image_url text not null,
-
-    is_primary boolean default false,
-
-    created_at timestamp with time zone default now()
+-- 10. ORDER_ITEMS
+CREATE TABLE IF NOT EXISTS order_items (
+    order_item_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID REFERENCES orders(order_id) ON DELETE CASCADE,
+    listing_id UUID REFERENCES listings(listing_id) ON DELETE SET NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    unit_price DECIMAL(10, 2) NOT NULL,
+    subtotal DECIMAL(10, 2) NOT NULL
 );
 
--- =====================================================
--- INDEXES
--- =====================================================
-
-create index if not exists idx_marketplace_items_category
-on marketplace_items(category_id);
-
-create index if not exists idx_marketplace_listings_seller
-on marketplace_listings(seller_id);
-
-create index if not exists idx_marketplace_listings_item
-on marketplace_listings(item_id);
-
-create index if not exists idx_marketplace_listings_status
-on marketplace_listings(listing_status);
-
-create index if not exists idx_marketplace_orders_buyer
-on marketplace_orders(buyer_id);
-
-create index if not exists idx_marketplace_orders_seller
-on marketplace_orders(seller_id);
-
-create index if not exists idx_marketplace_order_items_order
-on marketplace_order_items(marketplace_order_id);
-
-create index if not exists idx_marketplace_rentals_renter
-on marketplace_rentals(renter_id);
-
-create index if not exists idx_marketplace_reviews_listing
-on marketplace_reviews(listing_id);
-
--- =====================================================
--- ROW LEVEL SECURITY
--- =====================================================
-
-alter table marketplace_categories enable row level security;
-alter table marketplace_items enable row level security;
-alter table marketplace_listings enable row level security;
-alter table marketplace_orders enable row level security;
-alter table marketplace_order_items enable row level security;
-alter table marketplace_rentals enable row level security;
-alter table marketplace_payments enable row level security;
-alter table marketplace_reviews enable row level security;
-alter table marketplace_item_images enable row level security;
-
--- =====================================================
--- PUBLIC/LOGGED-IN MARKETPLACE VIEWING
--- =====================================================
-
-create policy "Authenticated users can view categories"
-on marketplace_categories
-for select
-to authenticated
-using (true);
-
-
-create policy "Authenticated users can view items"
-on marketplace_items
-for select
-to authenticated
-using (true);
-
-
-create policy "Authenticated users can view available listings"
-on marketplace_listings
-for select
-to authenticated
-using (listing_status <> 'Removed');
-
-
-create policy "Authenticated users can view item images"
-on marketplace_item_images
-for select
-to authenticated
-using (true);
-
--- =====================================================
--- SELLER POLICIES
--- =====================================================
-
-create policy "Students can create items"
-on marketplace_items
-for insert
-to authenticated
-with check (true);
-
-
-create policy "Students can create listings"
-on marketplace_listings
-for insert
-to authenticated
-with check (seller_id = auth.uid());
-
-
-create policy "Students can update their listings"
-on marketplace_listings
-for update
-to authenticated
-using (seller_id = auth.uid())
-with check (seller_id = auth.uid());
-
-
-create policy "Students can delete their listings"
-on marketplace_listings
-for delete
-to authenticated
-using (seller_id = auth.uid());
-
-
--- =====================================================
--- BUYER POLICIES
--- =====================================================
-
-create policy "Students can create orders"
-on marketplace_orders
-for insert
-to authenticated
-with check (buyer_id = auth.uid());
-
-
-create policy "Students can view their orders"
-on marketplace_orders
-for select
-to authenticated
-using (
-    buyer_id = auth.uid()
-    or seller_id = auth.uid()
+-- 11. PAYMENTS
+CREATE TABLE IF NOT EXISTS payments (
+    payment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID REFERENCES orders(order_id) ON DELETE CASCADE,
+    amount DECIMAL(10, 2) NOT NULL,
+    payment_method payment_method, -- Uses your custom ENUM
+    payment_reference VARCHAR(255),
+    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status payment_status DEFAULT 'pending' -- Uses your custom ENUM
 );
 
-create policy "Students can create order items"
-on marketplace_order_items
-for insert
-to authenticated
-with check (
-    exists (
-        select 1
-        from marketplace_orders
-        where marketplace_orders.marketplace_order_id =
-              marketplace_order_items.marketplace_order_id
-        and marketplace_orders.buyer_id = auth.uid()
-    )
+-- 12. MESSAGES
+CREATE TABLE IF NOT EXISTS messages (
+    message_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    receiver_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    listing_id UUID REFERENCES listings(listing_id) ON DELETE SET NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
-create policy "Students can view their order items"
-on marketplace_order_items
-for select
-to authenticated
-using (
-    exists (
-        select 1
-        from marketplace_orders
-        where marketplace_orders.marketplace_order_id =
-              marketplace_order_items.marketplace_order_id
-        and (
-            marketplace_orders.buyer_id = auth.uid()
-            or marketplace_orders.seller_id = auth.uid()
-        )
-    )
+-- 13. REVIEWS
+CREATE TABLE IF NOT EXISTS reviews (
+    review_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    listing_id UUID REFERENCES listings(listing_id) ON DELETE CASCADE,
+    reviewer_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    rating INT CHECK (rating >= 1 AND rating <= 5),
+    review_text TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
--- =====================================================
--- REVIEW POLICIES
--- =====================================================
 
-create policy "Students can view reviews"
-on marketplace_reviews
-for select
-to authenticated
-using (true);
+-- 14. NOTIFICATIONS
+CREATE TABLE IF NOT EXISTS notifications (
+    notification_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+    type notification_type, -- Uses your custom ENUM
+    title VARCHAR(255),
+    message TEXT,
+    is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
+-- 15. AUDIT_LOGS
+CREATE TABLE IF NOT EXISTS audit_logs (
+    log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    action VARCHAR(100),
+    table_name VARCHAR(100),
+    record_id UUID,
+    old_values JSONB,
+    new_values JSONB,
+    action_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-create policy "Students can create reviews"
-on marketplace_reviews
-for insert
-to authenticated
-with check (reviewer_id = auth.uid());
 
