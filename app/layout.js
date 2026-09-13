@@ -1,7 +1,7 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'Campus App',
+  title: 'UFH Campus Connect',
   description: 'Marketplace + Laundry booking for campus students',
 }
 
