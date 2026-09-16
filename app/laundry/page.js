@@ -1,26 +1,18 @@
-import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import './globals.css'
+import SessionGuard from '@/components/SessionGuard'
 
-export default async function LaundryPage() {
-  const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+export const metadata = {
+  title: 'Campus App',
+  description: 'Marketplace + Laundry booking for campus students',
+}
 
+export default function RootLayout({ children }) {
   return (
-    <main className="page">
-      <Link href="/" className="back-link">
-        &larr; Back
-      </Link>
-      <h1>Laundry Booking</h1>
-      <p className="subtitle">Logged in as {user.email}</p>
-      <p>
-        This is a placeholder for the laundry booking module. Real time-slot booking and
-        double-booking prevention logic will go here.
-      </p>
-      <div className="placeholder-box">
-        Example: a time-slot picker and a list of your upcoming bookings would render here.
-      </div>
-    </main>
+    <html lang="en">
+      <body>
+        <SessionGuard />
+        {children}
+      </body>
+    </html>
   )
 }
