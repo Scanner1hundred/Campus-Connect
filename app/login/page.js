@@ -1,4 +1,5 @@
 import { login, signup } from './actions'
+import SubmitButton from '@/components/SubmitButton'
 
 export default function LoginPage({ searchParams }) {
   const error = searchParams?.error
@@ -22,14 +23,22 @@ export default function LoginPage({ searchParams }) {
             Password
             <input type="password" name="password" required minLength={6} />
           </label>
-          <button type="submit" className="btn-primary">
+          <SubmitButton className="btn-primary" pendingText="Logging in...">
             Log In
-          </button>
+          </SubmitButton>
         </form>
 
         <div className="divider">or, if you&apos;re new here</div>
 
         <form action={signup} className="auth-form">
+          <label>
+            First Name
+            <input type="text" name="name" required />
+          </label>
+          <label>
+            Surname
+            <input type="text" name="surname" required />
+          </label>
           <label>
             Email
             <input type="email" name="email" required />
@@ -38,9 +47,9 @@ export default function LoginPage({ searchParams }) {
             Password
             <input type="password" name="password" required minLength={6} />
           </label>
-          <button type="submit" className="btn-secondary">
+          <SubmitButton className="btn-secondary" pendingText="Creating account...">
             Create Account
-          </button>
+          </SubmitButton>
         </form>
       </div>
     </main>
