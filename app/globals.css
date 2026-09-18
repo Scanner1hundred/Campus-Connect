@@ -602,11 +602,13 @@ button {
 }
 
 .crest-logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.4);
+  width: 88px;
+  height: 88px;
+  border-radius: 18px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
   margin-bottom: 18px;
 }
 
