@@ -39,7 +39,7 @@ export async function middleware(request) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (path === '/login' && user) {
+   if ((path === '/login' || path === '/signup') && user) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
@@ -47,5 +47,5 @@ export async function middleware(request) {
 }
 
 export const config = {
-  matcher: ['/', '/profile', '/market', '/laundry', '/login'],
+  matcher: ['/', '/profile', '/market', '/laundry', '/login', '/signup'],
 }
