@@ -35,12 +35,10 @@ export default function LoginCard({ message, error, defaultMode = 'login' }) {
 
             <form action={login} className="styled-auth-form">
               <label className="input-with-icon">
-                <span className="input-icon">✉️</span>
-                <input type="email" name="email" placeholder="Email address" required />
+                              <input type="email" name="email" placeholder="Email address" required />
               </label>
               <label className="input-with-icon">
-                <span className="input-icon">🔒</span>
-                <input type="password" name="password" placeholder="Password" required minLength={6} />
+                                <input type="password" name="password" placeholder="Password" required minLength={6} />
               </label>
 
               <div className="form-row">
@@ -72,19 +70,19 @@ export default function LoginCard({ message, error, defaultMode = 'login' }) {
 
             <form action={signup} className="styled-auth-form">
               <label className="input-with-icon">
-                <span className="input-icon">🙍</span>
+                
                 <input type="text" name="name" placeholder="First Name" required />
               </label>
               <label className="input-with-icon">
-                <span className="input-icon">🙍</span>
+                
                 <input type="text" name="surname" placeholder="Surname" required />
               </label>
               <label className="input-with-icon">
-                <span className="input-icon">✉️</span>
+                
                 <input type="email" name="email" placeholder="Email address" required />
               </label>
               <label className="input-with-icon">
-                <span className="input-icon">🔒</span>
+                
                 <input type="password" name="password" placeholder="Password" required minLength={6} />
               </label>
 
