@@ -1,4 +1,4 @@
-import './globals.css'
+import '../globals.css'
 import SessionGuard from '@/components/SessionGuard'
 
 export const metadata = {
