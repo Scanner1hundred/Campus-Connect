@@ -1,0 +1,129 @@
+/* Landing page styles — all classes prefixed "lp-" so they can't clash with globals.css */
+.lp {
+  --navy: #0a2a66;
+  --yellow: #ffc32b;
+  --muted: #475569;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f6fa;
+}
+
+.lp a:hover { text-decoration: none; }
+
+.lp-container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Header */
+.lp-header {
+  background: #fff;
+  border-bottom: 4px solid var(--navy);
+}
+.lp-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 86px;
+}
+.lp-brand { display: flex; align-items: center; gap: 14px; }
+.lp-crest { height: 72px; width: auto; }
+.lp-brand-name { margin: 0; font-size: 20px; font-weight: 700; color: var(--navy); }
+.lp-brand-tagline { margin: 2px 0 0; font-size: 13px; letter-spacing: 1.5px; color: #64748b; }
+
+.lp-nav { display: flex; align-items: center; gap: 24px; }
+.lp-nav-link { color: var(--muted); font-size: 15px; padding-bottom: 4px; border-bottom: 2px solid transparent; }
+.lp-nav-link.active { color: var(--navy); font-weight: 700; border-bottom-color: var(--yellow); }
+.lp-logout {
+  background: var(--yellow);
+  color: #1a1a1a;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.lp-logout:hover { filter: brightness(0.95); }
+
+/* Hero */
+.lp-main { flex: 1; display: flex; align-items: center; padding: 60px 0; }
+.lp-hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 48px;
+}
+.lp-hero-text h1 {
+  margin: 0 0 24px;
+  max-width: 420px;
+  font-size: 54px;
+  line-height: 1.22;
+  color: var(--navy);
+}
+.lp-hero-text p {
+  max-width: 520px;
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+/* Marketplace card */
+.lp-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  justify-self: center;
+  width: 100%;
+  max-width: 700px;
+}
+.lp-card {
+  min-width: 0;
+  padding: 36px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.lp-card:hover { box-shadow: 0 10px 25px rgba(10, 42, 102, 0.1); transform: translateY(-3px); }
+.lp-card-icon {
+  width: 72px; height: 72px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 12px;
+  background: #eff6ff;
+  color: var(--navy);
+  border-radius: 18px;
+}
+.lp-card-title { font-size: 22px; font-weight: 700; color: var(--navy); }
+.lp-card-sub { font-size: 14px; color: #64748b; }
+
+/* Footer */
+.lp-footer { background: #fff; border-top: 1px solid #e5e7eb; }
+.lp-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 72px;
+  font-size: 13px;
+  color: #64748b;
+}
+.lp-powered { display: flex; align-items: center; gap: 8px; color: #334155; }
+.lp-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; display: inline-block; }
+
+/* Responsive */
+@media (max-width: 800px) {
+  .lp-hero { grid-template-columns: 1fr; gap: 36px; }
+  .lp-cards { grid-template-columns: 1fr; }
+  .lp-hero-text h1 { font-size: 38px; }
+  .lp-brand-tagline { display: none; }
+  .lp-crest { height: 56px; }
+  .lp-nav { gap: 14px; }
+  .lp-footer-inner { flex-direction: column; gap: 8px; padding: 16px 24px; }
+}
