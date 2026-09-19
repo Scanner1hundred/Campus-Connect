@@ -2,6 +2,10 @@
 -- CAMPUSCONNECT DATABASE SCHEMA (merged & corrected)
 -- Auth: Supabase Auth (auth.users) -- do NOT create a
 -- separate users/roles table, Supabase already handles this.
+--
+-- This file reflects the live database after the cleanup
+-- migration (migration_cleanup.sql) removed 14 unrelated/
+-- duplicate tables and restored `profiles`.
 -- =======================================================
 
 -- Enable UUID generation
@@ -40,6 +44,25 @@ create policy "Users can insert own profile"
 create policy "Users can update own profile"
   on profiles for update
   using (auth.uid() = id);
+
+-- Auto-create a profile row the moment someone signs up, so
+-- new users don't need to visit /profile before their name
+-- shows up anywhere (RLS blocks a client-side insert before
+-- email confirmation, hence the server-side trigger).
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, full_name)
+  values (new.id, new.raw_user_meta_data ->> 'full_name');
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_auth_user_created on auth.users;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
 
 -- =======================================================
 -- 2. CATEGORIES & SUBCATEGORIES
@@ -168,22 +191,3 @@ create table if not exists audit_logs (
     new_values jsonb,
     action_date timestamp default current_timestamp
 );
--- Auto-create a profiles row whenever a new auth user signs up,
--- pulling full_name out of the signup metadata.
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.profiles (id, full_name)
-  values (new.id, new.raw_user_meta_data->>'full_name')
-  on conflict (id) do nothing;
-  return new;
-end;
-$$;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
