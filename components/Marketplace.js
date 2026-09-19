@@ -318,19 +318,7 @@ export default function Marketplace({ search = "" }) {
       ================================================== */}
 
       <div className="market-actions">
-        <Link
-    href="/market/browse"
-    className="browse-button"
-  >
-    <span className="browse-button-icon">🛍️</span>
-
-    <span className="browse-button-text">
-      <strong>Browse Marketplace</strong>
-      <small>Find items being sold by students</small>
-    </span>
-
-    <span className="browse-button-arrow">→</span>
-  </Link>
+        
 
         <Link
           href="/market/create"
