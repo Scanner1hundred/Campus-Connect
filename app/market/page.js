@@ -1,6 +1,6 @@
-import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import Marketplace from '@/components/Marketplace'
+import MarketShell from '@/components/MarketShell'
 
 export default async function MarketPage() {
   const supabase = createClient()
@@ -9,20 +9,20 @@ export default async function MarketPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
+  if (!user) {
+    redirect('/login')
+  }
+
+  // maybeSingle() returns null (not an error) if the profile row doesn't exist yet
   const { data: profile } = await supabase
     .from('profiles')
     .select('full_name')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
-  return (
-    <main className="page">
-      <Link href="/" className="back-link">
-        &larr; Back
-      </Link>
-      <h1>Marketplace</h1>
-      <p className="subtitle">Logged in as {profile?.full_name || user?.email}</p>
-      <Marketplace />
-    </main>
-  )
+  // Name from profiles table -> name saved at signup -> email as last resort
+  const displayName =
+    profile?.full_name || user.user_metadata?.full_name || user.email
+
+  return <MarketShell displayName={displayName} />
 }

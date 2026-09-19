@@ -729,3 +729,379 @@ button {
     padding: 36px 28px;
   }
 }
+/* =========================
+   MARKET SHELL (header + sidebar)
+   Append this to the bottom of app/globals.css
+========================= */
+
+.market-shell {
+  --ms-navy: #0a2f6b;
+  --ms-blue: #1266f1;
+  --ms-blue-soft: #e6efff;
+  --ms-green: #16a34a;
+  --ms-ink: #0d2350;
+  --ms-muted: #5d6f8f;
+  --ms-line: #dbe5f4;
+
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f3f7fd;
+  color: var(--ms-ink);
+}
+
+/* ---------- Header ---------- */
+.ms-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 24px;
+  background: var(--ms-navy);
+  color: white;
+}
+
+.ms-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: white;
+  font-size: 22px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ms-brand:hover {
+  text-decoration: none;
+}
+
+.ms-search {
+  flex: 1;
+  max-width: 640px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  background: white;
+  border-radius: 10px;
+  color: var(--ms-muted);
+}
+
+.ms-search:focus-within {
+  box-shadow: 0 0 0 3px rgba(18, 102, 241, 0.55);
+}
+
+.ms-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 15px;
+  color: var(--ms-ink);
+}
+
+.ms-user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ms-avatar {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #dbe8ff;
+  color: var(--ms-navy);
+  font-weight: 700;
+}
+
+.ms-user-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* ---------- Body / sidebar ---------- */
+.ms-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+}
+
+.ms-sidebar {
+  position: sticky;
+  top: 68px;
+  align-self: start;
+  height: calc(100vh - 68px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px 14px;
+  background: white;
+  border-right: 1px solid var(--ms-line);
+}
+
+.ms-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px 14px;
+  font-size: 14px;
+  color: var(--ms-muted);
+}
+
+.ms-nav {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--ms-ink);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ms-nav:hover {
+  background: #f1f6ff;
+  text-decoration: none;
+}
+
+.ms-nav.active {
+  background: var(--ms-blue-soft);
+  color: var(--ms-blue);
+}
+
+.ms-nav-disabled,
+.ms-nav-disabled:hover {
+  background: none;
+  color: var(--ms-muted);
+  cursor: default;
+}
+
+.ms-soon {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef2f9;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.ms-nav:focus-visible,
+.ms-back:focus-visible,
+.ms-action:focus-visible,
+.ms-link-button:focus-visible,
+.sell-button:focus-visible {
+  outline: 3px solid var(--ms-blue);
+  outline-offset: 2px;
+}
+
+/* ---------- Main area ---------- */
+.ms-main {
+  min-width: 0;
+  max-width: 1200px;
+  padding: 28px 32px;
+}
+
+.ms-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 36px;
+}
+
+.ms-action,
+.sell-button.sell-button--large {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 18px;
+  min-height: 120px;
+  padding: 0 28px;
+  border: none;
+  border-radius: 16px;
+  color: white;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-action:hover,
+.sell-button.sell-button--large:hover {
+  text-decoration: none;
+}
+
+.ms-action-browse {
+  background: var(--ms-blue);
+}
+
+.ms-action-browse:hover {
+  background: #0f56cc;
+}
+
+.ms-action-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ms-action-text strong {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.ms-action-text span {
+  font-size: 15px;
+  font-weight: 400;
+  opacity: 0.92;
+}
+
+.ms-action-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.ms-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.ms-section-head h2 {
+  margin: 0;
+  font-size: 26px;
+  color: var(--ms-ink);
+}
+
+.ms-link-button {
+  border: none;
+  background: none;
+  color: var(--ms-blue);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.recent-link {
+  display: block;
+  color: inherit;
+}
+
+.recent-link:hover {
+  text-decoration: none;
+}
+
+.recent-body {
+  padding: 14px 16px 16px;
+}
+
+.recent-body h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ms-ink);
+}
+
+.recent-body strong {
+  display: block;
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+
+.recent-body span {
+  font-size: 14px;
+  color: var(--ms-muted);
+}
+
+/* Existing "+ Sell an item" button inside the full marketplace view */
+.market-actions {
+  justify-content: flex-end;
+}
+
+.market-actions .sell-button {
+  height: 52px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 800px) {
+  .ms-header {
+    padding: 0 14px;
+    gap: 12px;
+  }
+
+  .ms-body {
+    grid-template-columns: 1fr;
+  }
+
+  /* Sidebar becomes a bottom tab bar on phones */
+  .ms-sidebar {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    height: auto;
+    flex-direction: row;
+    justify-content: space-around;
+    gap: 0;
+    padding: 6px;
+    border-right: none;
+    border-top: 1px solid var(--ms-line);
+  }
+
+  .ms-back,
+  .ms-soon {
+    display: none;
+  }
+
+  .ms-nav {
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 4px;
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .ms-main {
+    padding: 18px 16px 96px;
+  }
+}
+
+@media (max-width: 700px) {
+  .ms-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .ms-user-name {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .ms-brand-text {
+    display: none;
+  }
+}
