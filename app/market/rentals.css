@@ -1,0 +1,42 @@
+/* My Rentals page (uses the --ms-* colours from .market-shell) */
+.rt-wrap { width: 100%; max-width: 980px; margin: 0 auto; padding: 28px 24px 60px; }
+.rt-head h1 { margin: 0 0 4px; font-size: 28px; }
+.rt-head p { margin: 0 0 22px; color: var(--ms-muted); line-height: 1.5; }
+
+.rt-tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.rt-tab { padding: 10px 18px; border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; color: var(--ms-ink); font-weight: 600; font-size: 14px; }
+.rt-tab em { font-style: normal; margin-left: 6px; opacity: .7; }
+.rt-tab.active { background: var(--ms-blue); border-color: var(--ms-blue); color: #fff; }
+.rt-empty { padding: 40px 20px; text-align: center; background: #fff; border: 1px solid var(--ms-line); border-radius: 14px; color: var(--ms-muted); }
+
+.rt-card { background: #fff; border: 1px solid var(--ms-line); border-radius: 16px; padding: 22px; margin-bottom: 20px; }
+.rt-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.rt-card-head h2 { margin: 0 0 4px; font-size: 20px; }
+.rt-card-head p { margin: 0; color: var(--ms-muted); font-size: 14px; }
+
+.rt-status { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff; background: #64748b; white-space: nowrap; }
+.rt-status.rt-active { background: #7c3aed; }
+.rt-status.rt-completed { background: #16a34a; }
+.rt-status.rt-bought { background: #2563eb; }
+.rt-status.rt-refunded { background: #d97706; }
+
+.rt-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.rt-stats div { padding: 12px 14px; border-radius: 12px; background: #f3f7fd; }
+.rt-stats small { display: block; color: var(--ms-muted); font-size: 12px; margin-bottom: 4px; }
+.rt-stats strong { font-size: 18px; }
+
+.rt-table-wrap { overflow-x: auto; }
+.rt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rt-table th { text-align: left; padding: 8px 10px; color: var(--ms-muted); font-weight: 600; border-bottom: 1px solid var(--ms-line); }
+.rt-table td { padding: 9px 10px; border-bottom: 1px solid #eef2f9; white-space: nowrap; }
+
+.rt-pill { display: inline-block; padding: 2px 8px; margin-right: 4px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #e2e8f0; color: #475569; text-transform: capitalize; }
+.rt-pill.paid, .rt-pill.released { background: #dcfce7; color: #166534; }
+.rt-pill.scheduled { background: #fef3c7; color: #92400e; }
+.rt-pill.cancelled { background: #fee2e2; color: #991b1b; }
+
+.rt-demo { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: #fffbeb; border: 1px dashed #fcd34d; font-size: 13px; color: #92400e; }
+.rt-demo button { padding: 8px 14px; border: none; border-radius: 8px; background: #d97706; color: #fff; font-weight: 700; cursor: pointer; }
+.rt-demo button:disabled { opacity: .6; }
+
+@media (max-width: 640px) { .rt-stats { grid-template-columns: 1fr; } }

@@ -331,6 +331,12 @@ export default function MarketShell({ displayName }) {
             <span>Wishlist</span>
             {wishlistCount > 0 && <em className="ms-count">{wishlistCount}</em>}
           </button>
+           <Link href="/market/rentals" className="ms-nav">
+           <Icon name="listings" />
+           <span>My Rentals</span>
+           </Link>
+
+
 
           {/* Not built yet: shown but not clickable, so nobody lands on a 404 */}
           <span className="ms-nav ms-nav-disabled" aria-disabled="true">
