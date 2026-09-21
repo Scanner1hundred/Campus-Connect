@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 
 const PROTECTED_PATHS = ['/', '/profile', '/market', '/laundry']
+const AUTH_PATHS = ['/login', '/signup']
 
 export async function middleware(request) {
   let response = NextResponse.next({ request: { headers: request.headers } })
@@ -32,14 +33,17 @@ export async function middleware(request) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const path = request.nextUrl.pathname
-  const isProtected = PROTECTED_PATHS.includes(path)
+const path = request.nextUrl.pathname
+  const isProtected = PROTECTED_PATHS.some(
+    (p) => path === p || path.startsWith(`${p}/`)
+  )
+  const isAuthPath = AUTH_PATHS.includes(path)
 
   if (isProtected && !user) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-   if ((path === '/login' || path === '/signup') && user) {
+  if (isAuthPath && user) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
@@ -47,5 +51,5 @@ export async function middleware(request) {
 }
 
 export const config = {
-  matcher: ['/', '/profile', '/market', '/laundry', '/login', '/signup'],
+  matcher: ['/', '/profile/:path*', '/market/:path*', '/laundry/:path*', '/login', '/signup'],
 }
