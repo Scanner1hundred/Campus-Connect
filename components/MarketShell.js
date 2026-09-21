@@ -2,15 +2,18 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import Marketplace from "@/components/Marketplace"
+import MyListings from "@/components/MyListings"
+import Wishlist from "@/components/Wishlist"
 
 /* ---------- small inline icon set (no extra dependency) ---------- */
 const ICONS = {
-  cap: (
+  logo: (
     <>
-      <path d="M22 10 12 5 2 10l10 5 10-5z" />
-      <path d="M6 12v5c3 3 9 3 12 0v-5" />
+      <circle cx="9" cy="12" r="7" />
+      <circle cx="15" cy="12" r="7" />
     </>
   ),
   search: (
@@ -32,6 +35,15 @@ const ICONS = {
       <path d="M16 10a4 4 0 0 1-8 0" />
     </>
   ),
+  listings: (
+    <>
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </>
+  ),
+  heart: (
+    <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6z" />
+  ),
   bell: (
     <>
       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -39,12 +51,6 @@ const ICONS = {
     </>
   ),
   message: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
-  user: (
-    <>
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </>
-  ),
   plus: (
     <>
       <line x1="12" y1="5" x2="12" y2="19" />
@@ -199,20 +205,54 @@ function MarketHome({ onBrowse }) {
 
 /* ---------- Shell: header + sidebar + switchable content ---------- */
 export default function MarketShell({ displayName }) {
-  const [view, setView] = useState("home") // "home" | "market"
+  const pathname = usePathname()
+  const [view, setView] = useState("home") // "home" | "market" | "myListings" | "wishlist"
   const [search, setSearch] = useState("")
+  const [userId, setUserId] = useState(null)
+  const [myListingsCount, setMyListingsCount] = useState(0)
+  const [wishlistCount, setWishlistCount] = useState(0)
 
   const initial = displayName?.trim()?.[0]?.toUpperCase() || "?"
 
+  useEffect(() => {
+    const supabase = createClient()
+
+    async function loadUserAndCounts() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      setUserId(user.id)
+
+      const [{ count: listingsCount }, { count: favoritesCount }] = await Promise.all([
+        supabase
+          .from("listings")
+          .select("listing_id", { count: "exact", head: true })
+          .eq("seller_id", user.id),
+        supabase
+          .from("favorites")
+          .select("favorite_id", { count: "exact", head: true })
+          .eq("user_id", user.id),
+      ])
+
+      setMyListingsCount(listingsCount || 0)
+      setWishlistCount(favoritesCount || 0)
+    }
+
+    loadUserAndCounts()
+  }, [])
+
   function showView(next) {
     setView(next)
-    if (next === "home") setSearch("")
+    if (next !== "market") setSearch("")
   }
 
   function handleSearch(e) {
     const value = e.target.value
     setSearch(value)
-    // Searching from Home jumps straight to the full marketplace results
+    // Searching from anywhere jumps straight to the full marketplace results
     if (value.trim() && view !== "market") setView("market")
   }
 
@@ -220,7 +260,7 @@ export default function MarketShell({ displayName }) {
     <div className="market-shell">
       <header className="ms-header">
         <Link href="/" className="ms-brand">
-          <Icon name="cap" size={34} />
+          <Icon name="logo" size={30} />
           <span className="ms-brand-text">Campus Connect</span>
         </Link>
 
@@ -235,12 +275,12 @@ export default function MarketShell({ displayName }) {
           />
         </div>
 
-        <div className="ms-user">
+        <Link href={`/profile?from=${encodeURIComponent(pathname)}`} className="ms-user">
           <span className="ms-avatar" aria-hidden="true">
             {initial}
           </span>
           <span className="ms-user-name">{displayName}</span>
-        </div>
+        </Link>
       </header>
 
       <div className="ms-body">
@@ -270,6 +310,28 @@ export default function MarketShell({ displayName }) {
             <span>Marketplace</span>
           </button>
 
+          <button
+            type="button"
+            className={view === "myListings" ? "ms-nav active" : "ms-nav"}
+            aria-current={view === "myListings" ? "page" : undefined}
+            onClick={() => showView("myListings")}
+          >
+            <Icon name="listings" />
+            <span>My Listings</span>
+            {myListingsCount > 0 && <em className="ms-count">{myListingsCount}</em>}
+          </button>
+
+          <button
+            type="button"
+            className={view === "wishlist" ? "ms-nav active" : "ms-nav"}
+            aria-current={view === "wishlist" ? "page" : undefined}
+            onClick={() => showView("wishlist")}
+          >
+            <Icon name="heart" />
+            <span>Wishlist</span>
+            {wishlistCount > 0 && <em className="ms-count">{wishlistCount}</em>}
+          </button>
+
           {/* Not built yet: shown but not clickable, so nobody lands on a 404 */}
           <span className="ms-nav ms-nav-disabled" aria-disabled="true">
             <Icon name="bell" />
@@ -282,18 +344,16 @@ export default function MarketShell({ displayName }) {
             <span>Messages</span>
             <em className="ms-soon">Soon</em>
           </span>
-
-          <Link href="/profile" className="ms-nav">
-            <Icon name="user" />
-            <span>Profile</span>
-          </Link>
         </nav>
 
         <main className="ms-main">
-          {view === "home" ? (
-            <MarketHome onBrowse={() => showView("market")} />
-          ) : (
-            <Marketplace search={search} />
+          {view === "home" && <MarketHome onBrowse={() => showView("market")} />}
+          {view === "market" && <Marketplace search={search} />}
+          {view === "myListings" && (
+            <MyListings userId={userId} onCountChange={setMyListingsCount} />
+          )}
+          {view === "wishlist" && (
+            <Wishlist userId={userId} onCountChange={setWishlistCount} />
           )}
         </main>
       </div>

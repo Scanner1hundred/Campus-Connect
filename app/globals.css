@@ -906,6 +906,51 @@ button {
   font-weight: 600;
 }
 
+.ms-count {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef2f9;
+  color: var(--ms-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.ms-nav.active .ms-count {
+  background: #ffffff;
+  color: var(--ms-blue);
+}
+
+.status-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+  color: #fff;
+  background: #64748b;
+}
+
+.status-badge.status-active {
+  background: #16a34a;
+}
+
+.status-badge.status-sold {
+  background: #2563eb;
+}
+
+.status-badge.status-pending {
+  background: #d97706;
+}
+
+.status-badge.status-inactive,
+.status-badge.status-removed {
+  background: #94a3b8;
+}
 .ms-nav:focus-visible,
 .ms-back:focus-visible,
 .ms-action:focus-visible,

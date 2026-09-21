@@ -14,9 +14,14 @@ export default async function ProfilePage({ searchParams }) {
     .eq('id', user.id)
     .single()
 
+  // Only accept an internal path (starts with a single "/"), never an absolute URL,
+  // so this can't be used to redirect someone off the site.
+  const from = searchParams?.from
+  const backHref = from && from.startsWith('/') && !from.startsWith('//') ? from : '/'
+
   return (
     <main className="page">
-      <Link href="/" className="back-link">
+      <Link href={backHref} className="back-link">
         &larr; Back
       </Link>
       <h1>My Profile</h1>
