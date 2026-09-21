@@ -1,0 +1,42 @@
+/* Checkout / rent / card-picker styles. Self-contained (plain colours) so they work
+   on the listing page (.lp) and on the market pages (.market-shell). */
+.co-overlay {
+  position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(10, 42, 102, .55);
+}
+.co-modal { width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto; background: #fff; color: #0a2a66; border-radius: 18px; padding: 24px; }
+.co-modal h2 { margin: 0; font-size: 22px; }
+.co-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.co-close { border: none; background: none; font-size: 28px; line-height: 1; color: #64748b; cursor: pointer; }
+.co-demo { margin: 0 0 16px; padding: 10px 12px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 13px; line-height: 1.5; }
+.co-item { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; margin-bottom: 12px; border-bottom: 1px solid #dbe7f5; }
+.co-hint { margin: 0 0 12px; color: #64748b; font-size: 13px; line-height: 1.5; }
+.co-error { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #fee2e2; color: #b91c1c; font-size: 14px; }
+
+.co-methods { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.co-chip { padding: 10px 16px; border: 1px solid #dbe7f5; border-radius: 999px; background: #fff; color: #0a2a66; font-size: 14px; font-weight: 600; cursor: pointer; }
+.co-chip.active { background: #0a2a66; border-color: #0a2a66; color: #fff; }
+
+.co-cards { margin-bottom: 12px; }
+.co-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 8px; border: 1px solid #dbe7f5; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; }
+.co-card.selected { border-color: #0a2a66; background: #eef4ff; }
+.co-card em { margin-left: auto; font-style: normal; font-weight: 400; color: #64748b; font-size: 13px; }
+.co-link { border: none; background: none; padding: 4px 0; color: #0b63e5; font-weight: 600; font-size: 14px; cursor: pointer; }
+.co-newcard { margin-top: 8px; }
+
+.co-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 14px; font-weight: 600; }
+.co-field input, .co-field select, .co-field textarea { padding: 11px 13px; border: 1px solid #cbd5e1; border-radius: 10px; font: inherit; font-weight: 400; color: #0a2a66; background: #fff; }
+.co-field input:focus, .co-field select:focus, .co-field textarea:focus { outline: none; border-color: #0b63e5; box-shadow: 0 0 0 3px rgba(11, 99, 229, .15); }
+.co-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.co-summary { padding: 14px; border-radius: 12px; background: #f6f3ff; margin-bottom: 16px; }
+.co-line { display: flex; justify-content: space-between; font-size: 16px; }
+.co-summary ul { margin: 10px 0 0; padding-left: 18px; font-size: 13px; color: #475569; line-height: 1.6; }
+.co-consent { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; font-size: 13px; line-height: 1.5; color: #334155; cursor: pointer; }
+.co-consent input { margin-top: 3px; flex-shrink: 0; }
+
+.co-pay { width: 100%; padding: 14px; border: none; border-radius: 10px; background: #16a34a; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
+.co-pay:hover { background: #15803d; }
+.co-pay:disabled { opacity: .6; cursor: default; }
+.co-pay.purple { background: #7c3aed; }
+.co-pay.purple:hover { background: #6d28d9; }
