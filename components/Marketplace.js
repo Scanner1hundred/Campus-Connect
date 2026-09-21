@@ -295,7 +295,7 @@ export default function Marketplace({ search = "" }) {
       <div className="market-hero">
 
         <p className="eyebrow">
-          UNIVERSITY MARKETPLACE
+          CAMPUS CONNECT
         </p>
 
         <h2>
@@ -303,13 +303,6 @@ export default function Marketplace({ search = "" }) {
           <br />
           <span>on campus.</span>
         </h2>
-
-        <p className="hero-description">
-          Find affordable textbooks,
-          electronics, clothing and other
-          items from students in your
-          campus community.
-        </p>
 
       </div>
 
