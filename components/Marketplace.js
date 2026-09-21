@@ -694,7 +694,11 @@ export default function Marketplace({ search = "" }) {
                               {listing.condition ||
                                 "Used"}
                             </span>
-
+                               {listing.rent_price_monthly && (
+                               <span className="rent-tag">
+                               Rent R{Number(listing.rent_price_monthly).toFixed(0)}/mo
+                               </span>
+                               )} 
                           </div>
 
                           <Link

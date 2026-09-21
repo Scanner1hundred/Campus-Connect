@@ -1150,3 +1150,20 @@ button {
     display: none;
   }
 }
+
+/* "Rented" badge (shown on My Listings when an item is out on rent) */
+.status-badge.status-rented {
+  background: #7c3aed;
+}
+
+/* Small "Rent R200/mo" tag on browse cards */
+.rent-tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ede9fe;
+  color: #5b21b6;
+  font-size: 11px;
+  font-weight: 700;
+}
