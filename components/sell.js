@@ -1,256 +1,400 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
+import MarketHeader from "@/components/MarketHeader"
+import "@/app/market/sell.css"
 
-export default function CreateListingPage() {
-  const supabase = createClient();
-  const router = useRouter();
+const CONDITIONS = [
+  { value: "new", label: "New" },
+  { value: "like-new", label: "Like new" },
+  { value: "good", label: "Good" },
+  { value: "fair", label: "Fair" },
+  { value: "used", label: "Used" },
+]
+const MAX_IMAGES = 4
+const MAX_MB = 5
+const RENT_TO_BUY_MIN_PRICE = 2000 // items ABOVE this can offer rent-to-buy (also enforced in the database)
 
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
+export default function CreateListingPage({ displayName = "" }) {
+  const supabase = createClient()
+  const router = useRouter()
 
-  const [categories, setCategories] = useState([]);
-  const [subcategories, setSubcategories] = useState([]);
-  const [categoryId, setCategoryId] = useState("");
-  const [subCategoryId, setSubCategoryId] = useState("");
+  const [images, setImages] = useState([]) // [{ file, url }]
+  const [categories, setCategories] = useState([])
+  const [subcategories, setSubcategories] = useState([])
 
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [categoryId, setCategoryId] = useState("")
+  const [subCategoryId, setSubCategoryId] = useState("")
+  const [price, setPrice] = useState("")
+  const [condition, setCondition] = useState("good")
+  const [offerRent, setOfferRent] = useState(false)
+  const [rentPrice, setRentPrice] = useState("")
+  const [rentToBuy, setRentToBuy] = useState(false)
+
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMsg, setErrorMsg] = useState("")
 
   useEffect(() => {
     async function loadCategories() {
-      const { data: categoryData } = await supabase
-        .from("categories")
-        .select("*")
-        .order("category_name");
-
-      const { data: subCategoryData } = await supabase
-        .from("subcategories")
-        .select("*")
-        .order("sub_category_name");
-
-      setCategories(categoryData || []);
-      setSubcategories(subCategoryData || []);
+      const [{ data: cats }, { data: subs }] = await Promise.all([
+        supabase.from("categories").select("*").order("category_name"),
+        supabase.from("subcategories").select("*").order("sub_category_name"),
+      ])
+      setCategories(cats || [])
+      setSubcategories(subs || [])
     }
+    loadCategories()
+  }, [])
 
-    loadCategories();
-  }, []);
+  const filteredSubs = subcategories.filter((s) => s.category_id === categoryId)
+  const selectedSub = subcategories.find((s) => s.sub_category_id === subCategoryId)
+  const rentAllowed = !!selectedSub?.rent_eligible
+  const minMonths = selectedSub?.rent_min_months || 1
 
-  const filteredSubcategories = subcategories.filter(
-    (sub) => sub.category_id === categoryId
-  );
+  const priceNum = Number(price)
+  const rentNum = Number(rentPrice)
+  const rentToBuyAllowed = rentAllowed && offerRent && priceNum > RENT_TO_BUY_MIN_PRICE
 
-  function handleImageChange(event) {
-    const file = event.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+  // Rent is only for the rentable appliances: switch it off if the subcategory doesn't allow it
+  useEffect(() => {
+    if (!rentAllowed) {
+      setOfferRent(false)
+      setRentPrice("")
+      setRentToBuy(false)
     }
+  }, [rentAllowed])
+
+  // Rent-to-buy only above R2000
+  useEffect(() => {
+    if (!rentToBuyAllowed) setRentToBuy(false)
+  }, [rentToBuyAllowed])
+
+  function handleImages(event) {
+    const picked = Array.from(event.target.files || [])
+    event.target.value = ""
+    setErrorMsg("")
+
+    const next = [...images]
+    for (const file of picked) {
+      if (next.length >= MAX_IMAGES) break
+      if (!file.type.startsWith("image/")) continue
+      if (file.size > MAX_MB * 1024 * 1024) {
+        setErrorMsg(`Each photo must be under ${MAX_MB}MB.`)
+        continue
+      }
+      next.push({ file, url: URL.createObjectURL(file) })
+    }
+    setImages(next)
+  }
+
+  function removeImage(index) {
+    setImages((current) => {
+      URL.revokeObjectURL(current[index].url)
+      return current.filter((_, i) => i !== index)
+    })
   }
 
   async function handleSubmit(event) {
-    event.preventDefault();
-    setErrorMsg("");
+    event.preventDefault()
+    setErrorMsg("")
 
-    const form = event.target;
-    const title = form.title.value.trim();
-    const description = form.description.value.trim();
-    const price = form.price.value;
-    const condition = form.condition.value;
+    if (images.length === 0) return setErrorMsg("Please add at least one photo.")
+    if (!subCategoryId) return setErrorMsg("Please choose a category and subcategory.")
+    if (price === "" || !(priceNum >= 0)) return setErrorMsg("Please enter a valid price.")
+    if (offerRent && !(rentNum > 0)) return setErrorMsg("Please enter a monthly rent.")
 
-    if (!imageFile) {
-      setErrorMsg("Please add a product image.");
-      return;
-    }
-    if (!subCategoryId) {
-      setErrorMsg("Please select a category and subcategory.");
-      return;
-    }
-
-    setSubmitting(true);
+    setSubmitting(true)
+    let createdListingId = null
 
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await supabase.auth.getUser()
 
       if (!user) {
-        router.push("/login");
-        return;
+        router.push("/login")
+        return
       }
 
-      // 1. Create the listing row
       const { data: listing, error: listingError } = await supabase
         .from("listings")
         .insert({
           seller_id: user.id,
           sub_category_id: subCategoryId,
-          title,
-          description,
+          title: title.trim(),
+          description: description.trim(),
           condition,
-          price,
+          price: priceNum,
+          rent_price_monthly: offerRent ? rentNum : null,
+          rent_to_buy_enabled: offerRent && rentToBuy,
           status: "active",
         })
         .select()
-        .single();
+        .single()
 
-      if (listingError) throw listingError;
+      if (listingError) throw listingError
+      createdListingId = listing.listing_id
 
-      // 2. Upload the image to Storage
-      const filePath = `${user.id}/${listing.listing_id}-${imageFile.name}`;
+      for (let i = 0; i < images.length; i++) {
+        const file = images[i].file
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+        const filePath = `${user.id}/${listing.listing_id}-${i}-${safeName}`
 
-      const { error: uploadError } = await supabase.storage
-        .from("listing-images")
-        .upload(filePath, imageFile);
+        const { error: uploadError } = await supabase.storage.from("listing-images").upload(filePath, file)
+        if (uploadError) throw uploadError
 
-      if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("listing-images").getPublicUrl(filePath)
 
-      const { data: urlData } = supabase.storage
-        .from("listing-images")
-        .getPublicUrl(filePath);
-
-      // 3. Link the image to the listing
-      const { error: imageError } = await supabase
-        .from("listing_images")
-        .insert({
+        const { error: imageError } = await supabase.from("listing_images").insert({
           listing_id: listing.listing_id,
           image_url: urlData.publicUrl,
-          is_primary: true,
-        });
+          is_primary: i === 0,
+        })
+        if (imageError) throw imageError
+      }
 
-      if (imageError) throw imageError;
-
-      router.push("/market");
+      router.push("/market")
     } catch (err) {
-      console.error("Error creating listing:", err);
-      setErrorMsg("Something went wrong while posting your listing. Please try again.");
+      console.error("Error creating listing:", err)
+      // Don't leave a half-created listing (no photos) behind
+      if (createdListingId) {
+        await supabase.from("listings").delete().eq("listing_id", createdListingId)
+      }
+      setErrorMsg(err?.message || "Something went wrong while posting your listing. Please try again.")
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
   }
 
+  const tenMonths = rentNum * 10
+  const tenMonthsPct = priceNum > 0 ? Math.round((tenMonths / priceNum) * 100) : null
+
   return (
-    <main className="page">
-      <div className="sell-container">
-        <div className="sell-header">
-          <h1>Sell an Item</h1>
-          <p>Create a listing for other students on campus.</p>
+    <div className="market-shell">
+      <MarketHeader displayName={displayName} />
+
+      <main className="sf-wrap">
+        <div className="sf-head">
+          <h1>Sell an item</h1>
+          <p>Create a listing for other students on campus. One listing = one physical item.</p>
         </div>
 
         {errorMsg && <p className="notice error">{errorMsg}</p>}
 
-        <form onSubmit={handleSubmit} className="sell-form">
-          <div className="form-group">
-            <label htmlFor="image">Product image</label>
-            <input
-              id="image"
-              name="image"
-              type="file"
-              accept="image/*"
-              onChange={handleImageChange}
-              required
-            />
-            {imagePreview && (
-              <div className="image-preview">
-                <img src={imagePreview} alt="Product preview" />
+        <form onSubmit={handleSubmit}>
+          {/* 1. PHOTOS */}
+          <section className="sf-card">
+            <h2>Photos</h2>
+            <p className="sf-hint">
+              Add up to {MAX_IMAGES} clear photos of the actual item. The first one is the cover.
+            </p>
+
+            <div className="sf-photos">
+              {images.map((img, i) => (
+                <div className="sf-thumb" key={img.url}>
+                  <img src={img.url} alt={`Photo ${i + 1}`} />
+                  {i === 0 && <span className="sf-cover">Cover</span>}
+                  <button type="button" onClick={() => removeImage(i)} aria-label="Remove photo">
+                    ×
+                  </button>
+                </div>
+              ))}
+
+              {images.length < MAX_IMAGES && (
+                <label className="sf-drop">
+                  <input type="file" accept="image/*" multiple onChange={handleImages} />
+                  <span className="sf-drop-plus">+</span>
+                  <span>Add photo</span>
+                </label>
+              )}
+            </div>
+          </section>
+
+          {/* 2. DETAILS */}
+          <section className="sf-card">
+            <h2>Item details</h2>
+
+            <label className="sf-field">
+              Title
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Defy 250L fridge-freezer"
+                maxLength={120}
+                required
+              />
+            </label>
+
+            <label className="sf-field">
+              Description
+              <textarea
+                rows="5"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Condition, what's included, any scratches or faults..."
+                required
+              />
+            </label>
+          </section>
+
+          {/* 3. CATEGORY (fixed set, managed in the database) */}
+          <section className="sf-card">
+            <h2>Category</h2>
+            <p className="sf-hint">Pick where your item belongs. Food and drink are not allowed on the marketplace.</p>
+
+            <div className="sf-chips">
+              {categories.map((c) => (
+                <button
+                  type="button"
+                  key={c.category_id}
+                  className={categoryId === c.category_id ? "sf-chip active" : "sf-chip"}
+                  onClick={() => {
+                    setCategoryId(c.category_id)
+                    setSubCategoryId("")
+                  }}
+                >
+                  {c.category_name}
+                </button>
+              ))}
+            </div>
+
+            <label className="sf-field" style={{ marginTop: 16 }}>
+              Subcategory
+              <select
+                value={subCategoryId}
+                onChange={(e) => setSubCategoryId(e.target.value)}
+                disabled={!categoryId}
+                required
+              >
+                <option value="">{categoryId ? "Select a subcategory" : "Choose a category first"}</option>
+                {filteredSubs.map((s) => (
+                  <option key={s.sub_category_id} value={s.sub_category_id}>
+                    {s.sub_category_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+
+          {/* 4. PRICE + CONDITION */}
+          <section className="sf-card">
+            <h2>Price &amp; condition</h2>
+
+            <label className="sf-field">
+              Price (R) — the full amount you want for the item
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="e.g. 2500"
+                required
+              />
+            </label>
+
+            <div className="sf-field">
+              Condition
+              <div className="sf-chips">
+                {CONDITIONS.map((c) => (
+                  <button
+                    type="button"
+                    key={c.value}
+                    className={condition === c.value ? "sf-chip active" : "sf-chip"}
+                    onClick={() => setCondition(c.value)}
+                  >
+                    {c.label}
+                  </button>
+                ))}
               </div>
-            )}
-          </div>
+            </div>
+          </section>
 
-          <div className="form-group">
-            <label htmlFor="title">Item title</label>
-            <input
-              id="title"
-              name="title"
-              type="text"
-              placeholder="e.g. Accounting textbook"
-              required
-            />
-          </div>
+          {/* 5. RENT (fridges, microwaves, ovens, deep fryers, air fryers only) */}
+          {rentAllowed && (
+            <section className="sf-card sf-rent">
+              <label className="sf-toggle">
+                <input type="checkbox" checked={offerRent} onChange={(e) => setOfferRent(e.target.checked)} />
+                <span>
+                  <strong>Also offer this for rent</strong>
+                  <em>
+                    Available for fridges/freezers, microwaves, ovens, deep fryers and air fryers.
+                    {minMonths > 1 ? ` This item is rented for a minimum of ${minMonths} months.` : ""}
+                  </em>
+                </span>
+              </label>
 
-          <div className="form-group">
-            <label htmlFor="description">Description</label>
-            <textarea
-              id="description"
-              name="description"
-              rows="5"
-              placeholder="Describe your item..."
-              required
-            />
-          </div>
+              {offerRent && (
+                <>
+                  <label className="sf-field" style={{ marginTop: 16 }}>
+                    Monthly rent (R)
+                    <input
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      value={rentPrice}
+                      onChange={(e) => setRentPrice(e.target.value)}
+                      placeholder="e.g. 200"
+                    />
+                  </label>
 
-          <div className="form-group">
-            <label htmlFor="category">Category</label>
-            <select
-              id="category"
-              value={categoryId}
-              onChange={(e) => {
-                setCategoryId(e.target.value);
-                setSubCategoryId("");
-              }}
-              required
-            >
-              <option value="">Select a category</option>
-              {categories.map((category) => (
-                <option key={category.category_id} value={category.category_id}>
-                  {category.category_name}
-                </option>
-              ))}
-            </select>
-          </div>
+                  <label className={rentToBuyAllowed ? "sf-toggle" : "sf-toggle disabled"}>
+                    <input
+                      type="checkbox"
+                      checked={rentToBuy}
+                      disabled={!rentToBuyAllowed}
+                      onChange={(e) => setRentToBuy(e.target.checked)}
+                    />
+                    <span>
+                      <strong>Allow rent-to-buy</strong>
+                      <em>
+                        {priceNum > RENT_TO_BUY_MIN_PRICE
+                          ? "Renters can rent for 7–10 months, and after month 6 they can buy the item for your price minus the rent already paid."
+                          : `Only for items priced above R${RENT_TO_BUY_MIN_PRICE}.`}
+                      </em>
+                    </span>
+                  </label>
 
-          <div className="form-group">
-            <label htmlFor="subcategory">Subcategory</label>
-            <select
-              id="subcategory"
-              value={subCategoryId}
-              onChange={(e) => setSubCategoryId(e.target.value)}
-              disabled={!categoryId}
-              required
-            >
-              <option value="">
-                {categoryId ? "Select a subcategory" : "Choose a category first"}
-              </option>
-              {filteredSubcategories.map((sub) => (
-                <option key={sub.sub_category_id} value={sub.sub_category_id}>
-                  {sub.sub_category_name}
-                </option>
-              ))}
-            </select>
-          </div>
+                  {rentNum > 0 && tenMonthsPct !== null && (
+                    <div className="sf-callout">
+                      Over 10 months, R{rentNum.toFixed(0)}/month adds up to R{tenMonths.toFixed(0)} — about{" "}
+                      {tenMonthsPct}% of your asking price.
+                    </div>
+                  )}
 
-          <div className="form-group">
-            <label htmlFor="price">Price</label>
-            <input
-              id="price"
-              name="price"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="e.g. 250"
-              required
-            />
-          </div>
+                  <ul className="sf-rules">
+                    <li>Rentals of 3+ months: the renter pays 3 months upfront, and the last month is always prepaid.</li>
+                    <li>1–2 month rentals: each month is paid in full at the start of that month.</li>
+                    <li>Standard rentals run up to 6 months{rentToBuy ? "; with rent-to-buy, up to 10" : ""}.</li>
+                    <li>Campus Connect holds the money and pays you each month&apos;s rent at the end of that month.</li>
+                    <li>If the appliance breaks, the renter gets back the money not yet paid out to you.</li>
+                  </ul>
+                </>
+              )}
+            </section>
+          )}
 
-          <div className="form-group">
-            <label htmlFor="condition">Condition</label>
-            <select id="condition" name="condition" required>
-              <option value="">Select condition</option>
-              <option value="new">New</option>
-              <option value="like-new">Like New</option>
-              <option value="good">Good</option>
-              <option value="fair">Fair</option>
-              <option value="used">Used</option>
-            </select>
-          </div>
+          {selectedSub && !rentAllowed && (
+            <p className="sf-note">
+              Renting is only available for fridges/freezers, microwaves, ovens, deep fryers and air fryers.
+            </p>
+          )}
 
-          <button type="submit" className="post-listing-button" disabled={submitting}>
-            {submitting ? "Posting..." : "Post Listing"}
-          </button>
+          <div className="sf-actions">
+            <button type="button" className="sf-cancel" onClick={() => router.push("/market")}>
+              Cancel
+            </button>
+            <button type="submit" className="sf-submit" disabled={submitting}>
+              {submitting ? "Posting..." : "Post listing"}
+            </button>
+          </div>
         </form>
-      </div>
-    </main>
-  );
+      </main>
+    </div>
+  )
 }

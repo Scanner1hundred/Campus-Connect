@@ -1,0 +1,14 @@
+/* Extra bits for MarketHeader (the rest comes from the MarketShell styles in globals.css) */
+.mh-back {
+  margin-left: auto;
+  margin-right: 20px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.9;
+  white-space: nowrap;
+}
+.mh-back:hover {
+  opacity: 1;
+  text-decoration: none;
+}
