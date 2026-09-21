@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import BuyoutModal from "@/components/BuyoutModal"
 import { money } from "@/lib/cards"
 import "@/app/market/rentals.css"
 
@@ -16,22 +18,31 @@ const STATUS_LABEL = {
   cancelled: "Cancelled",
 }
 
-export default function MyRentals({ userId }) {
+const ISSUE_TEXT = {
+  reported: "Reported — waiting for the repairman's inspection and an admin decision. Payments are paused.",
+  approved: "Approved — your unpaid balance was refunded.",
+  rejected: "Rejected after inspection — the rental continues.",
+  auto_refunded: "Small appliance — refunded automatically.",
+}
+
+export default function MyRentals({ userId, isAdmin = false }) {
   const supabase = createClient()
   const [tab, setTab] = useState("renting") // "renting" | "rentedOut"
   const [rentals, setRentals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [busyId, setBusyId] = useState(null)
+  const [reportingId, setReportingId] = useState(null)
+  const [reportText, setReportText] = useState("")
+  const [buyout, setBuyout] = useState(null) // { rental, paid }
 
   async function load() {
     setError("")
-    // Bring every ledger up to date first (charges due, pay-outs earned, finished rentals)
     await supabase.rpc("process_my_rentals")
 
     const { data, error: fetchError } = await supabase
       .from("rentals")
-      .select("*, rental_charges(*), rental_payouts(*)")
+      .select("*, rental_charges(*), rental_payouts(*), rental_issues(*), rental_refunds(*)")
       .or(`renter_id.eq.${userId},owner_id.eq.${userId}`)
       .order("created_at", { ascending: false })
 
@@ -56,6 +67,24 @@ export default function MyRentals({ userId }) {
     setBusyId(null)
   }
 
+  async function submitReport(rentalId) {
+    setBusyId(rentalId)
+    setError("")
+    const { data, error: rpcError } = await supabase.rpc("report_breakage", {
+      p_rental_id: rentalId,
+      p_description: reportText,
+    })
+    if (rpcError) {
+      setError(rpcError.message)
+    } else {
+      setReportingId(null)
+      setReportText("")
+    }
+    await load()
+    setBusyId(null)
+    return data
+  }
+
   const renting = rentals.filter((r) => r.renter_id === userId)
   const rentedOut = rentals.filter((r) => r.owner_id === userId)
   const list = tab === "renting" ? renting : rentedOut
@@ -64,7 +93,15 @@ export default function MyRentals({ userId }) {
     <div className="rt-wrap">
       <div className="rt-head">
         <h1>My Rentals</h1>
-        <p>Every payment in and out of your rentals. Prepaid money is held by Campus Connect and paid to the owner month by month.</p>
+        <p>
+          Every payment in and out of your rentals. Prepaid money is held by Campus Connect and paid to the owner
+          month by month.
+        </p>
+        {isAdmin && (
+          <Link href="/market/admin/rentals" className="rt-admin-link">
+            Admin: review breakage reports →
+          </Link>
+        )}
       </div>
 
       <div className="rt-tabs">
@@ -89,13 +126,21 @@ export default function MyRentals({ userId }) {
       {list.map((r) => {
         const charges = [...(r.rental_charges || [])].sort((a, b) => a.rent_month - b.rent_month)
         const payouts = [...(r.rental_payouts || [])].sort((a, b) => a.rent_month - b.rent_month)
+        const issues = [...(r.rental_issues || [])].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+        const refunded = (r.rental_refunds || []).reduce((s, x) => s + Number(x.amount), 0)
+
         const paid = charges.filter((c) => c.status === "paid").reduce((s, c) => s + Number(c.amount), 0)
         const released = payouts.filter((p) => p.status === "released").reduce((s, p) => s + Number(p.amount), 0)
-        const held = paid - released
-        const demoDate = new Date(Date.now() + r.demo_offset_days * 86400000).toLocaleDateString("en-ZA", {
-          day: "numeric", month: "short", year: "numeric",
-        })
+        const held = r.status === "active" ? paid - released : 0
+
+        const demoNow = new Date(Date.now() + r.demo_offset_days * 86400000)
+        const buyoutOpens = new Date(`${r.start_date}T00:00:00`)
+        buyoutOpens.setMonth(buyoutOpens.getMonth() + 6)
+
         const isRenter = r.renter_id === userId
+        const openIssue = issues.find((i) => i.status === "reported")
+        const canReport = r.status === "active" && isRenter && !openIssue
+        const canBuyout = r.status === "active" && isRenter && r.rent_to_buy && !openIssue && demoNow >= buyoutOpens
 
         return (
           <article className="rt-card" key={r.rental_id}>
@@ -111,11 +156,31 @@ export default function MyRentals({ userId }) {
               <span className={`rt-status rt-${r.status}`}>{STATUS_LABEL[r.status] || r.status}</span>
             </div>
 
+            {r.status === "refunded" && (
+              <div className="rt-banner refund">
+                {isRenter ? "You were refunded" : "The renter was refunded"} <strong>{money(refunded)}</strong> — the
+                money that hadn&apos;t been paid out yet. The listing is now inactive; re-activate it from My Listings
+                once it&apos;s repaired or replaced.
+              </div>
+            )}
+            {r.status === "bought" && (
+              <div className="rt-banner bought">Bought out — the item now belongs to the renter.</div>
+            )}
+
             <div className="rt-stats">
               <div><small>{isRenter ? "You've paid" : "Renter has paid"}</small><strong>{money(paid)}</strong></div>
               <div><small>Held by Campus Connect</small><strong>{money(held)}</strong></div>
               <div><small>{isRenter ? "Paid out to owner" : "Paid out to you"}</small><strong>{money(released)}</strong></div>
             </div>
+
+            {issues.map((i) => (
+              <div className={`rt-issue ${i.status}`} key={i.issue_id}>
+                <strong>Problem report:</strong> “{i.description}”
+                <br />
+                {ISSUE_TEXT[i.status]}
+                {i.repairman_note ? <> Repairman/admin note: “{i.repairman_note}”</> : null}
+              </div>
+            ))}
 
             <div className="rt-table-wrap">
               <table className="rt-table">
@@ -153,10 +218,54 @@ export default function MyRentals({ userId }) {
               </table>
             </div>
 
+            {r.status === "active" && isRenter && r.rent_to_buy && !canBuyout && (
+              <p className="rt-note">Rent-to-buy: you can buy this item once month 6 is finished ({fmt(buyoutOpens.toISOString().slice(0, 10))}).</p>
+            )}
+
+            {(canBuyout || canReport) && (
+              <div className="rt-actions">
+                {canBuyout && (
+                  <button type="button" className="rt-btn purple" onClick={() => setBuyout({ rental: r, paid })}>
+                    Buy it now — {money(Math.max(Number(r.listing_price) - paid, 0))}
+                  </button>
+                )}
+                {canReport && reportingId !== r.rental_id && (
+                  <button type="button" className="rt-btn outline" onClick={() => setReportingId(r.rental_id)}>
+                    Report a problem
+                  </button>
+                )}
+              </div>
+            )}
+
+            {reportingId === r.rental_id && (
+              <div className="rt-report">
+                <label htmlFor={`rep-${r.rental_id}`}>What went wrong?</label>
+                <textarea
+                  id={`rep-${r.rental_id}`}
+                  rows="3"
+                  value={reportText}
+                  onChange={(e) => setReportText(e.target.value)}
+                  placeholder="e.g. The compressor stopped cooling on Tuesday..."
+                />
+                <p className="rt-note">
+                  Small appliances (microwave, oven, fryers) are refunded automatically. Fridges are inspected by a
+                  repairman first, then approved by an admin — payments are paused while that happens. You get back
+                  the money that hasn&apos;t been paid out to the owner yet.
+                </p>
+                <div className="rt-actions">
+                  <button type="button" className="rt-btn danger" onClick={() => submitReport(r.rental_id)} disabled={busyId === r.rental_id}>
+                    {busyId === r.rental_id ? "Sending..." : "Submit report"}
+                  </button>
+                  <button type="button" className="rt-btn outline" onClick={() => setReportingId(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+
             {r.status === "active" && isRenter && (
               <div className="rt-demo">
                 <span>
-                  Demo date: <strong>{demoDate}</strong>
+                  Demo date:{" "}
+                  <strong>{demoNow.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}</strong>
                 </span>
                 <button type="button" onClick={() => skipMonth(r.rental_id)} disabled={busyId === r.rental_id}>
                   {busyId === r.rental_id ? "..." : "⏩ Skip 1 month (demo)"}
@@ -166,6 +275,18 @@ export default function MyRentals({ userId }) {
           </article>
         )
       })}
+
+      {buyout && (
+        <BuyoutModal
+          rental={buyout.rental}
+          paid={buyout.paid}
+          onClose={() => setBuyout(null)}
+          onDone={() => {
+            setBuyout(null)
+            load()
+          }}
+        />
+      )}
     </div>
   )
 }

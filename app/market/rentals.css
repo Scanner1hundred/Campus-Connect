@@ -40,3 +40,24 @@
 .rt-demo button:disabled { opacity: .6; }
 
 @media (max-width: 640px) { .rt-stats { grid-template-columns: 1fr; } }
+
+/* ---- commit 5 additions ---- */
+.rt-admin-link { display: inline-block; margin-bottom: 18px; color: var(--ms-blue); font-weight: 600; font-size: 14px; }
+.rt-section { margin: 26px 0 12px; font-size: 18px; }
+.rt-banner { margin-bottom: 14px; padding: 12px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+.rt-banner.refund { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; }
+.rt-banner.bought { background: #dbeafe; border: 1px solid #93c5fd; color: #1e40af; }
+.rt-issue { margin-bottom: 14px; padding: 12px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12; }
+.rt-issue.approved, .rt-issue.auto_refunded { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+.rt-issue.rejected { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
+.rt-note { margin: 12px 0 0; color: var(--ms-muted); font-size: 13px; line-height: 1.5; }
+.rt-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.rt-btn { padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; border: 1.5px solid transparent; }
+.rt-btn.purple { background: #7c3aed; color: #fff; }
+.rt-btn.danger { background: #dc2626; color: #fff; }
+.rt-btn.outline { background: #fff; color: var(--ms-ink); border-color: var(--ms-line); }
+.rt-btn:disabled { opacity: .6; cursor: default; }
+.rt-report { margin-top: 14px; padding: 14px; border-radius: 12px; background: #f8fafc; border: 1px solid var(--ms-line); }
+.rt-report label, .rt-label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+.rt-report textarea, .rt-textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--ms-line); border-radius: 10px; font: inherit; color: var(--ms-ink); background: #fff; box-sizing: border-box; }
+.rt-label { margin-top: 14px; }
