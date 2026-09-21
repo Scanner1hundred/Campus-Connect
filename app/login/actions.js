@@ -34,7 +34,7 @@ export async function signup(formData) {
   })
 
   if (error) {
-    redirect('/login?error=' + encodeURIComponent(error.message))
+    redirect('/signup?error=' + encodeURIComponent(error.message))
   }
 
   redirect(
