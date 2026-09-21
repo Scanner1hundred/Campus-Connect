@@ -1,11 +1,18 @@
 -- =======================================================
 -- CAMPUSCONNECT DATABASE SCHEMA (merged & corrected)
 -- Auth: Supabase Auth (auth.users) -- do NOT create a
--- separate users/roles table, Supabase already handles this.
+-- separate users/roles table for logins, Supabase already handles this.
 --
 -- This file reflects the live database after the cleanup
 -- migration (migration_cleanup.sql) removed 14 unrelated/
--- duplicate tables and restored `profiles`.
+-- duplicate tables and restored `profiles`, plus section 9
+-- (UFH domain restriction + roles).
+--
+-- DASHBOARD CONTRACT (use these names, don't invent new ones):
+--   roles ........ app_role: 'student' | 'admin'      (table user_roles.role)
+--   kinds ........ account_kind: 'student' | 'lecturer' | 'demo_admin'  (user_roles.kind)
+--   admin check .. public.is_admin()  (SQL / RLS)  or user_roles.role = 'admin' (app code)
+--   who is staff . admin_allowlist (SQL Editor only, no client access)
 -- =======================================================
 
 -- Enable UUID generation
@@ -20,6 +27,11 @@ create type notification_type as enum ('message', 'order', 'payment', 'review', 
 
 -- =======================================================
 -- 1. PROFILES (shared auth layer -- linked to Supabase Auth)
+-- NOTE: roles are NOT stored here (users can edit their own
+-- profile row, so a role column would be self-promotable).
+-- See section 9: user_roles.
+-- The handle_new_user() trigger that fills this table is
+-- defined in section 9.
 -- =======================================================
 create table if not exists profiles (
   id uuid references auth.users(id) on delete cascade primary key,
@@ -44,25 +56,6 @@ create policy "Users can insert own profile"
 create policy "Users can update own profile"
   on profiles for update
   using (auth.uid() = id);
-
--- Auto-create a profile row the moment someone signs up, so
--- new users don't need to visit /profile before their name
--- shows up anywhere (RLS blocks a client-side insert before
--- email confirmation, hence the server-side trigger).
-create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, full_name)
-  values (new.id, new.raw_user_meta_data ->> 'full_name');
-  return new;
-end;
-$$ language plpgsql security definer;
-
-drop trigger if exists on_auth_user_created on auth.users;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
 
 -- =======================================================
 -- 2. CATEGORIES & SUBCATEGORIES
@@ -328,3 +321,132 @@ with check (bucket_id = 'listing-images' and auth.role() = 'authenticated');
 create policy "Users can delete their own listing images in storage"
 on storage.objects for delete
 using (bucket_id = 'listing-images' and auth.uid()::text = (storage.foldername(name))[1]);
+
+-- =======================================================
+-- 9. UFH DOMAIN RESTRICTION + ROLES
+-- Students : studentnumber@ufh.ac.za (9 digits) - open sign-up
+-- Staff    : initialSurname@ufh.ac.za - ONLY if in admin_allowlist
+--            (lecturers, plus group demo admins for the capstone demo)
+-- Anything else is rejected at the auth.users level.
+-- The allowlist rows themselves are seeded separately
+-- (seed_group_admins.sql, kept out of GitHub).
+-- =======================================================
+do $$ begin
+  create type app_role as enum ('student', 'admin');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type account_kind as enum ('student', 'lecturer', 'demo_admin');
+exception when duplicate_object then null; end $$;
+
+create table if not exists admin_allowlist (
+  email text primary key
+    check (email = lower(email) and email like '%@ufh.ac.za'),
+  note text,
+  added_at timestamptz default now()
+);
+alter table admin_allowlist
+  add column if not exists kind account_kind not null default 'lecturer'
+  check (kind <> 'student');
+alter table admin_allowlist enable row level security;
+
+create table if not exists user_roles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  role app_role not null default 'student',
+  created_at timestamptz default now()
+);
+alter table user_roles
+  add column if not exists kind account_kind not null default 'student';
+alter table user_roles enable row level security;
+
+drop policy if exists "Users can view own role" on user_roles;
+create policy "Users can view own role"
+  on user_roles for select
+  using (user_id = auth.uid());
+
+create or replace function public.enforce_ufh_email()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  e text := lower(trim(coalesce(new.email, '')));
+begin
+  if tg_op = 'UPDATE' and new.email is not distinct from old.email then
+    return new;
+  end if;
+  if e !~ '^[^@[:space:]]+@ufh\.ac\.za$' then
+    raise exception 'Only @ufh.ac.za email addresses are allowed';
+  end if;
+  if e ~ '^[0-9]{9}@ufh\.ac\.za$' then
+    return new;
+  end if;
+  if exists (select 1 from public.admin_allowlist where email = e) then
+    return new;
+  end if;
+  raise exception 'This @ufh.ac.za address is not registered for Campus Connect';
+end;
+$$;
+
+drop trigger if exists a_enforce_ufh_email on auth.users;
+create trigger a_enforce_ufh_email
+  before insert or update of email on auth.users
+  for each row execute function public.enforce_ufh_email();
+
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  e text := lower(new.email);
+  r app_role := 'student';
+  k account_kind := 'student';
+  sn text := null;
+  allow_kind account_kind;
+begin
+  select kind into allow_kind from admin_allowlist where email = e;
+  if found then
+    r := 'admin';
+    k := allow_kind;
+  end if;
+
+  if e ~ '^[0-9]{9}@ufh\.ac\.za$' then
+    sn := split_part(e, '@', 1);
+  end if;
+
+  insert into profiles (id, full_name, student_number)
+  values (new.id, new.raw_user_meta_data ->> 'full_name', sn)
+  on conflict (id) do nothing;
+
+  insert into user_roles (user_id, role, kind)
+  values (new.id, r, k)
+  on conflict (user_id) do nothing;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+create or replace function public.lock_student_number()
+returns trigger language plpgsql as $$
+begin
+  if old.student_number is not null
+     and new.student_number is distinct from old.student_number then
+    raise exception 'Student number cannot be changed';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists lock_student_number on profiles;
+create trigger lock_student_number
+  before update on profiles
+  for each row execute function public.lock_student_number();
+
+create or replace function public.is_admin()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from user_roles where user_id = auth.uid() and role = 'admin');
+$$;
+
+insert into user_roles (user_id, role)
+select id, 'student' from auth.users
+on conflict (user_id) do nothing;
