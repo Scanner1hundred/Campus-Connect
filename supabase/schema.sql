@@ -191,3 +191,140 @@ create table if not exists audit_logs (
     new_values jsonb,
     action_date timestamp default current_timestamp
 );
+
+-- =======================================================
+-- 7. ROW LEVEL SECURITY — MARKETPLACE & SUPPORTING TABLES
+-- Everything below `profiles` had no RLS until this section:
+-- the anon/public API key is embedded in every client bundle,
+-- so without these policies any of these tables were readable
+-- and writable by anyone through the Supabase REST API.
+-- =======================================================
+
+-- Categories & subcategories: public read-only
+alter table categories enable row level security;
+create policy "Anyone can view categories"
+  on categories for select using (true);
+
+alter table subcategories enable row level security;
+create policy "Anyone can view subcategories"
+  on subcategories for select using (true);
+
+-- Listings: anyone can view active ones; only the seller can manage their own
+alter table listings enable row level security;
+
+create policy "Anyone can view active listings"
+  on listings for select
+  using (status = 'active' or seller_id = auth.uid());
+
+create policy "Sellers can insert their own listings"
+  on listings for insert
+  with check (seller_id = auth.uid());
+
+create policy "Sellers can update their own listings"
+  on listings for update
+  using (seller_id = auth.uid());
+
+create policy "Sellers can delete their own listings"
+  on listings for delete
+  using (seller_id = auth.uid());
+
+-- Listing images: viewable with their listing; sellers manage their own
+alter table listing_images enable row level security;
+
+create policy "Anyone can view listing images"
+  on listing_images for select using (true);
+
+create policy "Sellers can manage their own listing images"
+  on listing_images for all
+  using (
+    exists (
+      select 1 from listings
+      where listings.listing_id = listing_images.listing_id
+      and listings.seller_id = auth.uid()
+    )
+  );
+
+-- Favorites: strictly your own
+alter table favorites enable row level security;
+
+create policy "Users can view their own favorites"
+  on favorites for select using (user_id = auth.uid());
+
+create policy "Users can add their own favorites"
+  on favorites for insert with check (user_id = auth.uid());
+
+create policy "Users can remove their own favorites"
+  on favorites for delete using (user_id = auth.uid());
+
+-- Not wired into the frontend yet, but reachable via the API regardless —
+-- locking these down ahead of building the features that use them
+alter table orders enable row level security;
+create policy "Buyers and sellers can view their own orders"
+  on orders for select using (buyer_id = auth.uid() or seller_id = auth.uid());
+create policy "Buyers can create orders"
+  on orders for insert with check (buyer_id = auth.uid());
+
+alter table order_items enable row level security;
+create policy "Order items visible to the order's buyer/seller"
+  on order_items for select
+  using (
+    exists (
+      select 1 from orders
+      where orders.order_id = order_items.order_id
+      and (orders.buyer_id = auth.uid() or orders.seller_id = auth.uid())
+    )
+  );
+
+alter table payments enable row level security;
+create policy "Payments visible to the order's buyer/seller"
+  on payments for select
+  using (
+    exists (
+      select 1 from orders
+      where orders.order_id = payments.order_id
+      and (orders.buyer_id = auth.uid() or orders.seller_id = auth.uid())
+    )
+  );
+
+alter table messages enable row level security;
+create policy "Users can view their own messages"
+  on messages for select using (sender_id = auth.uid() or receiver_id = auth.uid());
+create policy "Users can send messages"
+  on messages for insert with check (sender_id = auth.uid());
+
+alter table reviews enable row level security;
+create policy "Anyone can view reviews"
+  on reviews for select using (true);
+create policy "Users can leave their own reviews"
+  on reviews for insert with check (reviewer_id = auth.uid());
+
+alter table notifications enable row level security;
+create policy "Users can view their own notifications"
+  on notifications for select using (user_id = auth.uid());
+
+-- Audit logs: internal only, no client access at all —
+-- RLS enabled with zero policies blocks every API request,
+-- leaving it readable only from the SQL Editor / service role
+alter table audit_logs enable row level security;
+
+-- =======================================================
+-- 8. STORAGE — LISTING IMAGES BUCKET
+-- Backs the image upload in the "Sell an item" flow
+-- (components/sell.js). Public bucket: listing photos are
+-- meant to be visible to anyone browsing the marketplace.
+-- =======================================================
+insert into storage.buckets (id, name, public)
+values ('listing-images', 'listing-images', true)
+on conflict (id) do nothing;
+
+create policy "Anyone can view listing images in storage"
+on storage.objects for select
+using (bucket_id = 'listing-images');
+
+create policy "Authenticated users can upload listing images"
+on storage.objects for insert
+with check (bucket_id = 'listing-images' and auth.role() = 'authenticated');
+
+create policy "Users can delete their own listing images in storage"
+on storage.objects for delete
+using (bucket_id = 'listing-images' and auth.uid()::text = (storage.foldername(name))[1]);
