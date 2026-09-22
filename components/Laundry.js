@@ -1,8 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import MarketHeader from '@/components/MarketHeader';
+import { money } from '@/lib/cards';
+import LaundryCheckout from '@/components/LaundryCheckout';
 import '@/app/laundry/laundry.css';
 
 /* ------------------------------------------------------------------ */
@@ -19,7 +22,7 @@ const CYCLES = {
   both: {
     label: 'Wash + Dry',
     minutes: 90,
-    hint: 'One slot, wash then dry. 90 minutes plus 15 to clear out.',
+    hint: 'One slot, wash then dry. R50 — R10 cheaper than booking wash and dry separately.',
     steps: [
       { key: 'wash', label: 'Wash 45 min', min: 45 },
       { key: 'dry', label: 'Dry 45 min', min: 45 },
@@ -29,7 +32,7 @@ const CYCLES = {
   wash: {
     label: 'Wash only',
     minutes: 60,
-    hint: 'Washing only. 60 minutes plus 15 to clear out.',
+    hint: 'Washing only. R30, and counts as 1 of your 2 cycles for the day.',
     steps: [
       { key: 'wash', label: 'Wash 60 min', min: 60 },
       { key: 'clear', label: 'Clear out 15', min: 15 },
@@ -38,7 +41,7 @@ const CYCLES = {
   dry: {
     label: 'Dry only',
     minutes: 60,
-    hint: 'Drying only. 60 minutes plus 15 to clear out.',
+    hint: 'Drying only. R30, and counts as 1 of your 2 cycles for the day.',
     steps: [
       { key: 'dry', label: 'Dry 60 min', min: 60 },
       { key: 'clear', label: 'Clear out 15', min: 15 },
@@ -46,8 +49,11 @@ const CYCLES = {
   },
 };
 
-// PLACEHOLDER prices. Change these, or set a value to '' to hide it.
-const PRICES = { both: 'R15.00', wash: 'R10.00', dry: 'R10.00' };
+// Real (demo) prices — charged via the saved-card checkout, same as Marketplace Buy.
+const PRICES = { both: 50, wash: 30, dry: 30 };
+// How many of the day's 2 cycles each booking type uses.
+const CYCLE_CREDIT = { both: 2, wash: 1, dry: 1 };
+const DAILY_CREDIT_LIMIT = 2;
 
 /* ------------------------------------------------------------------ */
 /* Time helpers (everything is shown in campus time)                   */
@@ -93,6 +99,17 @@ const dayShort = (ymd) =>
 /* ------------------------------------------------------------------ */
 /* Small pieces                                                        */
 /* ------------------------------------------------------------------ */
+function BrandLogo() {
+  // Same two-circle mark as MarketShell/MarketHeader's brand.
+  return (
+    <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="12" r="7" />
+      <circle cx="15" cy="12" r="7" />
+    </svg>
+  );
+}
+
 function MachineIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -139,7 +156,9 @@ export default function Laundry({ displayName = '' }) {
   const [notice, setNotice] = useState(null); // { type: 'error' | 'ok' | 'info', text }
   const [busy, setBusy] = useState(false);
   const [cancelId, setCancelId] = useState(null);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const pathname = usePathname();
 
   const availReq = useRef(0);
 
@@ -173,7 +192,7 @@ export default function Laundry({ displayName = '' }) {
   const loadMine = useCallback(async () => {
     const { data, error } = await supabase
       .from('laundry_bookings')
-      .select('booking_id, slot_start, cycle')
+      .select('booking_id, slot_start, cycle, amount')
       .eq('status', 'confirmed')
       .gte('slot_start', `${todayStr()}T00:00:00${UTC_OFFSET}`)
       .order('slot_start', { ascending: true });
@@ -203,12 +222,16 @@ export default function Laundry({ displayName = '' }) {
     return map;
   }, [mine, day]);
 
-  // wash-only and dry-only can't be split across one day
-  const splitConflict = useMemo(() => {
-    if (cycle === 'both') return null;
-    const other = cycle === 'wash' ? 'dry' : 'wash';
-    return mine.some((b) => dayOf(b.slot_start) === day && b.cycle === other) ? other : null;
-  }, [mine, day, cycle]);
+  // Max 2 cycles a day (any mix of wash/dry/both); a "both" booking uses 2 by itself.
+  const creditsUsedToday = useMemo(
+    () =>
+      mine
+        .filter((b) => dayOf(b.slot_start) === day)
+        .reduce((sum, b) => sum + CYCLE_CREDIT[b.cycle], 0),
+    [mine, day]
+  );
+  const creditsLeftToday = DAILY_CREDIT_LIMIT - creditsUsedToday;
+  const cycleNeedsMoreThanLeft = CYCLE_CREDIT[cycle] > creditsLeftToday;
 
   const leftFor = (row) => {
     if (!row) return 0;
@@ -247,23 +270,22 @@ export default function Laundry({ displayName = '' }) {
     setNotice(null);
   }
 
-  async function confirmBooking() {
-    if (!selectedStart || busy) return;
-    setBusy(true);
+  function openCheckout() {
+    if (!selectedStart || cycleNeedsMoreThanLeft) return;
     setNotice(null);
-    const { error } = await supabase.rpc('book_laundry_slot', {
-      p_slot_start: selectedStart.toISOString(),
-      p_cycle: cycle,
-    });
-    setBusy(false);
-    if (error) {
-      setNotice({ type: 'error', text: error.message || 'Could not book that slot.' });
-      loadAvail(); // the slot may have just filled up
-      return;
-    }
+    setCheckoutOpen(true);
+  }
+
+  function closeCheckout() {
+    setCheckoutOpen(false);
+    loadAvail(); // in case the slot changed while the modal was open
+  }
+
+  function handlePaid(result) {
+    setCheckoutOpen(false);
     setNotice({
       type: 'ok',
-      text: `Booked for ${dayShort(day)}, ${hm(selectedStart)}. Please be out by ${hm(beOutBy)}.`,
+      text: `Paid ${money(result?.amount ?? PRICES[cycle])} — booked for ${dayShort(day)}, ${hm(selectedStart)}. Please be out by ${hm(beOutBy)}. Reference ${result?.payment_reference || ''}.`,
     });
     setSelected(null);
     loadAvail();
@@ -288,35 +310,69 @@ export default function Laundry({ displayName = '' }) {
   /* ---- render ---- */
   return (
     <main className="ln-page">
-      <MarketHeader displayName={displayName} backHref="/" backLabel="Back to home" />
+      {/* Marketplace shell's header, trimmed to brand + profile — no search bar, no sidebar. */}
+      <header className="ms-header">
+        <Link href="/" className="ms-brand">
+          <BrandLogo />
+          <span className="ms-brand-text">Campus Connect</span>
+        </Link>
+        <Link href={`/profile?from=${encodeURIComponent(pathname)}`} className="ms-user">
+          <span className="ms-avatar" aria-hidden="true">
+            {(displayName || '?').trim().charAt(0).toUpperCase()}
+          </span>
+          <span className="ms-user-name">{displayName}</span>
+        </Link>
+      </header>
+
       <div className="ln-wrap">
         <h1 className="ln-title">Laundry Booking</h1>
 
-        <section className="ln-hero">
-          <span className="ln-bubble ln-bubble-1" aria-hidden="true" />
-          <span className="ln-bubble ln-bubble-2" aria-hidden="true" />
-          <span className="ln-bubble ln-bubble-3" aria-hidden="true" />
-          <span className="ln-bubble ln-bubble-4" aria-hidden="true" />
-          <div className="ln-hero-text">
-            <p className="ln-eyebrow">Campus laundry room</p>
-            <h2 className="ln-headline">
-              Fresh clothes,
-              <br />
-              <span>zero queueing.</span>
-            </h2>
-            <p className="ln-hero-sub">Book a slot, walk in, and your machines are waiting.</p>
-            <span className="ln-pill">
-              <span className="ln-pill-dot" />
-              Walk-ups welcome when machines are free
-            </span>
-          </div>
-          <svg className="ln-wave" viewBox="0 0 1200 46" preserveAspectRatio="none" aria-hidden="true">
-            <path
-              d="M0 26c150 22 300 22 450 0s300-22 450 0 225 16 300 8v12H0z"
-              fill="#ffffff"
-              fillOpacity="0.7"
-            />
-          </svg>
+        <section className="ln-card" aria-label="My upcoming bookings">
+          <h3 className="ln-section-title">My upcoming bookings</h3>
+          {upcoming.length === 0 ? (
+            <p className="ln-empty">Nothing booked yet. Pick a day and time below.</p>
+          ) : (
+            <ul className="ln-mine-list">
+              {upcoming.map((b) => {
+                const canCancel = b.start.getTime() - CANCEL_CUTOFF_MIN * 60000 > now.getTime();
+                return (
+                  <li key={b.booking_id} className="ln-mine">
+                    <span className="ln-mine-icon">
+                      <MachineIcon />
+                    </span>
+                    <div className="ln-mine-body">
+                      <p className="ln-mine-when">
+                        {dayShort(dayOf(b.start))}, {hm(b.start)} – {hm(b.end)}
+                      </p>
+                      <p className="ln-mine-meta">
+                        {CYCLES[b.cycle].label} · {money(b.amount ?? PRICES[b.cycle])}. Be out by {hm(b.out)}.
+                      </p>
+                    </div>
+                    {canCancel &&
+                      (cancelId === b.booking_id ? (
+                        <>
+                          <button
+                            type="button"
+                            className="ln-link-btn"
+                            disabled={busy}
+                            onClick={() => cancelBooking(b.booking_id)}
+                          >
+                            Yes, cancel
+                          </button>
+                          <button type="button" className="ln-link-btn is-plain" onClick={() => setCancelId(null)}>
+                            Keep
+                          </button>
+                        </>
+                      ) : (
+                        <button type="button" className="ln-link-btn" onClick={() => setCancelId(b.booking_id)}>
+                          Cancel
+                        </button>
+                      ))}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         <div className="ln-layout">
@@ -329,6 +385,7 @@ export default function Laundry({ displayName = '' }) {
                     type="button"
                     className={`ln-seg-btn${cycle === key ? ' is-active' : ''}`}
                     aria-pressed={cycle === key}
+                    disabled={CYCLE_CREDIT[key] > creditsLeftToday}
                     onClick={() => changeCycle(key)}
                   >
                     {c.label}
@@ -336,6 +393,11 @@ export default function Laundry({ displayName = '' }) {
                 ))}
               </div>
               <p className="ln-cycle-hint">{cyc.hint}</p>
+              <p className="ln-cycle-hint">
+                {creditsLeftToday > 0
+                  ? `${creditsLeftToday} of ${DAILY_CREDIT_LIMIT} cycles left on ${dayShort(day)}.`
+                  : `You've used your ${DAILY_CREDIT_LIMIT} cycles for ${dayShort(day)}.`}
+              </p>
             </section>
 
             <section className="ln-card" aria-label="Choose a day">
@@ -371,10 +433,11 @@ export default function Laundry({ displayName = '' }) {
                 </div>
               )}
 
-              {splitConflict && (
+              {cycleNeedsMoreThanLeft && (
                 <div className="ln-notice is-info" role="status">
-                  You already have a {splitConflict}-only booking on this day. To wash and dry on the same
-                  day, choose Wash + Dry in one slot, or pick another day.
+                  {creditsLeftToday <= 0
+                    ? `You've already booked ${DAILY_CREDIT_LIMIT} cycles on ${dayShort(day)}. Pick another day, or cancel a booking above.`
+                    : `Wash + Dry needs ${CYCLE_CREDIT.both} cycles, but you only have ${creditsLeftToday} left on ${dayShort(day)}. Choose Wash only or Dry only instead.`}
                 </div>
               )}
 
@@ -394,7 +457,7 @@ export default function Laundry({ displayName = '' }) {
                     const passed = startDate <= now;
                     const booked = Boolean(mineByStart[start]);
                     const isSelected = selected === start;
-                    const disabled = passed || booked || left <= 0 || Boolean(splitConflict);
+                    const disabled = passed || booked || left <= 0 || cycleNeedsMoreThanLeft;
 
                     let caption;
                     if (booked) caption = 'Your booking';
@@ -430,62 +493,6 @@ export default function Laundry({ displayName = '' }) {
                 </div>
               )}
             </section>
-
-            <section className="ln-card" aria-label="My upcoming bookings">
-              <h3 className="ln-section-title">My upcoming bookings</h3>
-              {upcoming.length === 0 ? (
-                <p className="ln-empty">Nothing booked yet. Pick a day and time above.</p>
-              ) : (
-                <ul className="ln-mine-list">
-                  {upcoming.map((b) => {
-                    const canCancel = b.start.getTime() - CANCEL_CUTOFF_MIN * 60000 > now.getTime();
-                    return (
-                      <li key={b.booking_id} className="ln-mine">
-                        <span className="ln-mine-icon">
-                          <MachineIcon />
-                        </span>
-                        <div className="ln-mine-body">
-                          <p className="ln-mine-when">
-                            {dayShort(dayOf(b.start))}, {hm(b.start)} – {hm(b.end)}
-                          </p>
-                          <p className="ln-mine-meta">
-                            {CYCLES[b.cycle].label}. Be out by {hm(b.out)}.
-                          </p>
-                        </div>
-                        {canCancel &&
-                          (cancelId === b.booking_id ? (
-                            <>
-                              <button
-                                type="button"
-                                className="ln-link-btn"
-                                disabled={busy}
-                                onClick={() => cancelBooking(b.booking_id)}
-                              >
-                                Yes, cancel
-                              </button>
-                              <button
-                                type="button"
-                                className="ln-link-btn is-plain"
-                                onClick={() => setCancelId(null)}
-                              >
-                                Keep
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              className="ln-link-btn"
-                              onClick={() => setCancelId(b.booking_id)}
-                            >
-                              Cancel
-                            </button>
-                          ))}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
           </div>
 
           <aside className="ln-summary" aria-label="Booking summary">
@@ -498,17 +505,15 @@ export default function Laundry({ displayName = '' }) {
                 </p>
                 <p className="ln-sum-mode">
                   {cyc.label}
-                  {PRICES[cycle] && <span className="ln-only-mobile"> for {PRICES[cycle]}</span>}
+                  <span className="ln-only-mobile"> for {money(PRICES[cycle])}</span>
                 </p>
 
                 <div className="ln-sum-extra">
                   <Timeline steps={cyc.steps} />
-                  {PRICES[cycle] && (
-                    <div className="ln-sum-row">
-                      <span>Price</span>
-                      <span className="ln-sum-price">{PRICES[cycle]}</span>
-                    </div>
-                  )}
+                  <div className="ln-sum-row">
+                    <span>Price</span>
+                    <span className="ln-sum-price">{money(PRICES[cycle])}</span>
+                  </div>
                 </div>
               </>
             ) : (
@@ -518,18 +523,30 @@ export default function Laundry({ displayName = '' }) {
             <button
               type="button"
               className="ln-confirm"
-              disabled={!selectedStart || busy}
-              onClick={confirmBooking}
+              disabled={!selectedStart || cycleNeedsMoreThanLeft}
+              onClick={openCheckout}
             >
-              {busy ? 'Booking…' : 'Confirm booking'}
+              Continue to payment
             </button>
             <p className="ln-fine">
               Please be out by {beOutBy ? hm(beOutBy) : '15 minutes after your cycle ends'}. You can cancel up
-              to 30 minutes before your slot. Walk-ups are welcome when machines are free (max 4 a day).
+              to 30 minutes before your slot for a full refund. Walk-ups are welcome when machines are free
+              (max 4 a day).
             </p>
           </aside>
         </div>
       </div>
+
+      {checkoutOpen && selectedStart && (
+        <LaundryCheckout
+          summary={`${cyc.label} · ${dayShort(day)}, ${hm(selectedStart)}–${hm(selectedEnd)}`}
+          cycle={cycle}
+          amount={PRICES[cycle]}
+          slotStart={selectedStart}
+          onClose={closeCheckout}
+          onSuccess={handlePaid}
+        />
+      )}
     </main>
   );
 }
