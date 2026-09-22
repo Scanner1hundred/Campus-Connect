@@ -310,7 +310,7 @@ export default function MarketShell({ displayName }) {
       </header>
 
       <div className="ms-body">
-        <nav> className="ms-sidebar" aria-label="Marketplace navigation">
+        <nav className="ms-sidebar" aria-label="Marketplace navigation">
           <Link href="/" className="ms-back">
             <Icon name="back" size={16} />
             All services
