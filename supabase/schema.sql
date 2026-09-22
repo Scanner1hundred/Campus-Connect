@@ -1203,3 +1203,250 @@ revoke all on function public.buyout_rental(uuid, uuid) from public;
 grant execute on function public.report_breakage(uuid, text) to authenticated;
 grant execute on function public.resolve_rental_issue(uuid, boolean, text) to authenticated;
 grant execute on function public.buyout_rental(uuid, uuid) to authenticated;
+-- =====================================================================
+-- Campus Connect: Laundry module
+-- Workflow: commit this file in a PR first. Run it in the Supabase
+-- SQL Editor only AFTER the PR is merged. Safe to re-run.
+-- =====================================================================
+--
+-- Rules encoded here
+--   * One campus laundry room. Nine slots a day, one every 105 minutes
+--     (90 min + 15 min grace). Times are Africa/Johannesburg.
+--   * Cycles: 'both' (wash + dry, 90 min), 'wash' (60 min), 'dry' (60 min).
+--     Every cycle books one of the same nine slots.
+--   * Capacity per slot, per machine type = active machines - 1 (reserve).
+--       washers used = 'both' + 'wash' bookings
+--       dryers  used = 'both' + 'dry'  bookings
+--   * A student may not hold a wash-only AND a dry-only booking on the
+--     same day (they should book 'both'). Different days are fine.
+--   * Students can book up to 7 days ahead and cancel up to 30 min
+--     before the slot starts.
+--   * Walk-ups (max 4 a day) are a house rule in the room, not tracked here.
+-- =====================================================================
+
+create table if not exists laundry_machines (
+  machine_id  uuid primary key default gen_random_uuid(),
+  name        text not null,
+  machine_type text not null check (machine_type in ('washer', 'dryer')),
+  active      boolean not null default true,
+  created_at  timestamptz default now()
+);
+
+create table if not exists laundry_bookings (
+  booking_id  uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  slot_start  timestamptz not null,
+  cycle       text not null default 'both' check (cycle in ('both', 'wash', 'dry')),
+  status      text not null default 'confirmed' check (status in ('confirmed', 'cancelled')),
+  created_at  timestamptz default now()
+);
+
+-- one confirmed booking per student per slot (they can rebook after cancelling)
+create unique index if not exists laundry_one_booking_per_slot
+  on laundry_bookings (user_id, slot_start) where status = 'confirmed';
+
+create index if not exists laundry_bookings_slot_idx
+  on laundry_bookings (slot_start) where status = 'confirmed';
+
+-- Starting machines: 5 washers + 5 dryers (only when the table is empty)
+do $$
+begin
+  if not exists (select 1 from laundry_machines) then
+    insert into laundry_machines (name, machine_type)
+      select 'Washer ' || g, 'washer' from generate_series(1, 5) g;
+    insert into laundry_machines (name, machine_type)
+      select 'Dryer ' || g, 'dryer' from generate_series(1, 5) g;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Row Level Security
+-- Students can read machines and their OWN bookings. All writes to
+-- bookings go through the functions below (security definer), so there
+-- are deliberately no insert/update/delete policies on laundry_bookings.
+-- Machine add/remove is SQL-Editor-only until the admin view exists —
+-- when it's built, gate its writes with the existing public.is_admin()
+-- (see schema.sql §9), the same check the rental-issue admin queue uses.
+-- No separate laundry_staff table is needed for that.
+-- ---------------------------------------------------------------------
+alter table laundry_machines enable row level security;
+alter table laundry_bookings enable row level security;
+
+drop policy if exists "machines readable by signed-in users" on laundry_machines;
+create policy "machines readable by signed-in users"
+  on laundry_machines for select to authenticated using (true);
+
+drop policy if exists "students read own bookings" on laundry_bookings;
+create policy "students read own bookings"
+  on laundry_bookings for select to authenticated using (user_id = auth.uid());
+
+-- ---------------------------------------------------------------------
+-- Availability: spots left per slot for one day
+-- (security definer, because students cannot read other students' rows)
+-- ---------------------------------------------------------------------
+create or replace function laundry_availability(p_day date)
+returns table (slot_start timestamptz, washers_left int, dryers_left int)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with cap as (
+    select
+      greatest(count(*) filter (where machine_type = 'washer' and active) - 1, 0) as w,
+      greatest(count(*) filter (where machine_type = 'dryer'  and active) - 1, 0) as d
+    from laundry_machines
+  ),
+  slots as (
+    select ((p_day + t) at time zone 'Africa/Johannesburg') as s
+    from unnest(array['06:00','07:45','09:30','11:15','13:00','14:45','16:30','18:15','20:00']::time[]) as t
+  )
+  select
+    slots.s,
+    greatest(cap.w - b.w_used, 0)::int,
+    greatest(cap.d - b.d_used, 0)::int
+  from slots
+  cross join cap
+  cross join lateral (
+    select
+      count(*) filter (where cycle in ('both', 'wash')) as w_used,
+      count(*) filter (where cycle in ('both', 'dry'))  as d_used
+    from laundry_bookings lb
+    where lb.slot_start = slots.s and lb.status = 'confirmed'
+  ) b
+  order by slots.s;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Book a slot. Locks the student's day and the slot so two people can't
+-- take the last spot at the same moment.
+-- ---------------------------------------------------------------------
+create or replace function book_laundry_slot(p_slot_start timestamptz, p_cycle text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid      uuid := auth.uid();
+  v_local    timestamp := p_slot_start at time zone 'Africa/Johannesburg';
+  v_day      date := (p_slot_start at time zone 'Africa/Johannesburg')::date;
+  v_today    date := (now() at time zone 'Africa/Johannesburg')::date;
+  v_cap_w    int;
+  v_cap_d    int;
+  v_used_w   int;
+  v_used_d   int;
+  v_id       uuid;
+begin
+  if v_uid is null then
+    raise exception 'Please sign in to book a slot.' using errcode = '28000';
+  end if;
+
+  if p_cycle not in ('both', 'wash', 'dry') then
+    raise exception 'Choose Wash + Dry, Wash only or Dry only.';
+  end if;
+
+  if not (v_local::time = any (array['06:00','07:45','09:30','11:15','13:00','14:45','16:30','18:15','20:00']::time[])) then
+    raise exception 'That is not a valid laundry time.';
+  end if;
+
+  if p_slot_start <= now() then
+    raise exception 'That slot has already started. Pick a later one.';
+  end if;
+
+  if v_day > v_today + 6 then
+    raise exception 'You can book up to 7 days ahead.';
+  end if;
+
+  -- locks, always taken in the same order (student, then slot) to avoid deadlocks
+  perform pg_advisory_xact_lock(hashtextextended('laundry-user:' || v_uid::text || ':' || v_day::text, 0));
+  perform pg_advisory_xact_lock(hashtextextended('laundry-slot:' || p_slot_start::text, 0));
+
+  if exists (
+    select 1 from laundry_bookings
+    where user_id = v_uid and slot_start = p_slot_start and status = 'confirmed'
+  ) then
+    raise exception 'You already have a booking in that slot.';
+  end if;
+
+  -- no wash-only + dry-only split on the same day
+  if p_cycle in ('wash', 'dry') and exists (
+    select 1 from laundry_bookings
+    where user_id = v_uid
+      and status = 'confirmed'
+      and (slot_start at time zone 'Africa/Johannesburg')::date = v_day
+      and cycle in ('wash', 'dry')
+      and cycle <> p_cycle
+  ) then
+    raise exception 'You can''t book wash and dry separately on the same day. Choose Wash + Dry, or pick another day.';
+  end if;
+
+  select
+    greatest(count(*) filter (where machine_type = 'washer' and active) - 1, 0),
+    greatest(count(*) filter (where machine_type = 'dryer'  and active) - 1, 0)
+  into v_cap_w, v_cap_d
+  from laundry_machines;
+
+  select
+    count(*) filter (where cycle in ('both', 'wash')),
+    count(*) filter (where cycle in ('both', 'dry'))
+  into v_used_w, v_used_d
+  from laundry_bookings
+  where slot_start = p_slot_start and status = 'confirmed';
+
+  if p_cycle in ('both', 'wash') and v_used_w >= v_cap_w then
+    raise exception 'No washers left in that slot. Try another time.';
+  end if;
+  if p_cycle in ('both', 'dry') and v_used_d >= v_cap_d then
+    raise exception 'No dryers left in that slot. Try another time.';
+  end if;
+
+  insert into laundry_bookings (user_id, slot_start, cycle)
+  values (v_uid, p_slot_start, p_cycle)
+  returning booking_id into v_id;
+
+  return v_id;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Cancel your own booking, up to 30 minutes before it starts
+-- ---------------------------------------------------------------------
+create or replace function cancel_laundry_booking(p_booking_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_start timestamptz;
+begin
+  if v_uid is null then
+    raise exception 'Please sign in.' using errcode = '28000';
+  end if;
+
+  select slot_start into v_start
+  from laundry_bookings
+  where booking_id = p_booking_id and user_id = v_uid and status = 'confirmed'
+  for update;
+
+  if v_start is null then
+    raise exception 'Booking not found.';
+  end if;
+
+  if v_start - interval '30 minutes' <= now() then
+    raise exception 'Bookings can only be cancelled up to 30 minutes before the slot starts.';
+  end if;
+
+  update laundry_bookings set status = 'cancelled' where booking_id = p_booking_id;
+end;
+$$;
+
+-- only signed-in users may call these
+revoke all on function laundry_availability(date)               from public, anon;
+revoke all on function book_laundry_slot(timestamptz, text)     from public, anon;
+revoke all on function cancel_laundry_booking(uuid)             from public, anon;
+grant execute on function laundry_availability(date)            to authenticated;
+grant execute on function book_laundry_slot(timestamptz, text)  to authenticated;
+grant execute on function cancel_laundry_booking(uuid)          to authenticated;
