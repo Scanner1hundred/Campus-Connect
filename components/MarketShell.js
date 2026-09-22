@@ -310,7 +310,7 @@ export default function MarketShell({ displayName }) {
       </header>
 
       <div className="ms-body">
-        <nav className="ms-sidebar" aria-label="Marketplace navigation">
+        <nav> className="ms-sidebar" aria-label="Marketplace navigation">
           <Link href="/" className="ms-back">
             <Icon name="back" size={16} />
             All services
@@ -360,16 +360,17 @@ export default function MarketShell({ displayName }) {
 
 
 
-          {/* Built*/}
-          <Link href="/market/notifications" className="ms-nav">
+          
+           <Link href="/market/notifications" className="ms-nav">
              <Icon name="bell" />
              <span>Notifications</span>
-          </Link>
+           </Link>
 
-          <Link href="/market/messages" className="ms-nav">
+           <Link href="/market/messages" className="ms-nav">
              <Icon name="message" />
              <span>Messages</span>
            </Link>
+           </nav>
 
         <main className="ms-main">
           {view === "home" && (
