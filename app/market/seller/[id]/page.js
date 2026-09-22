@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import SiteHeader from '@/components/SiteHeader'
+import MarketHeader from '@/components/MarketHeader'
 import SiteFooter from '@/components/SiteFooter'
 import Stars from '@/components/Stars'
 import Icon from '@/components/Icon'
@@ -9,11 +9,23 @@ import '@/app/market/market-pages.css'
 
 const slugify = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
-export default async function SellerPage({ params }) {
+export default async function SellerPage({ params, searchParams }) {
   const supabase = createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  // Where this seller page was opened from (a listing, Marketplace, etc.)
+  const backHref = searchParams?.from || '/market'
+  // This page's own URL, so its listing cards can find their way back here.
+  const selfUrl = `/market/seller/${params.id}${searchParams?.from ? `?from=${encodeURIComponent(searchParams.from)}` : ''}`
+
+  const { data: viewerProfile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .maybeSingle()
+  const displayName = viewerProfile?.full_name || user.user_metadata?.full_name || user.email
 
   const [{ data: seller }, { data: rating }, { data: listings }] = await Promise.all([
     supabase
@@ -61,14 +73,14 @@ export default async function SellerPage({ params }) {
   const total = listings?.length || 0
 
   return (
-    <div className="lp">
-      <SiteHeader />
+    <div className="lp market-shell">
+      <MarketHeader displayName={displayName} backHref={backHref} backLabel="Back" />
 
       <main className="ld-main">
         <div className="lp-container">
           <div className="ld-content" style={{ maxWidth: 'none' }}>
             <nav className="ld-breadcrumb">
-              <Link href="/market">Marketplace</Link>
+              <Link href={backHref}>Marketplace</Link>
               <span>›</span>
               <span>{isMe ? 'My listings' : sellerName}</span>
             </nav>
@@ -138,7 +150,7 @@ export default async function SellerPage({ params }) {
                                     </span>
                                   )}
                                 </div>
-                                <Link href={`/market/${listing.listing_id}`} className="view-button">View</Link>
+                                <Link href={`/market/${listing.listing_id}?from=${encodeURIComponent(selfUrl)}`} className="view-button">View</Link>
                               </div>
                             </div>
                           </article>

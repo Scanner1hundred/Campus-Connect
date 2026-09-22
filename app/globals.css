@@ -234,8 +234,8 @@ button {
 .market-hero {
   background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
   border-radius: 24px;
-  padding: 55px;
-  margin-bottom: 25px;
+  padding: 24px 28px;
+  margin-bottom: 14px;
 }
 
 .eyebrow {
@@ -243,13 +243,13 @@ button {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 1.5px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .market-hero h2 {
-  font-size: 42px;
-  line-height: 1.1;
-  margin: 0 0 18px;
+  font-size: 26px;
+  line-height: 1.2;
+  margin: 0;
   color: #17211b;
 }
 
@@ -310,14 +310,14 @@ button {
 
 /* Categories */
 .categories-section {
-  margin-bottom: 40px;
+  margin-bottom: 22px;
 }
 
 .section-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .section-heading h2 {
@@ -356,7 +356,7 @@ button {
 
 /* Listings */
 .listings-section {
-  margin-top: 30px;
+  margin-top: 4px;
 }
 
 .listing-count {

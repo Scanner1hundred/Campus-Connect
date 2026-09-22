@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { useScrollRestore } from "@/lib/useScrollRestore"
 
-export default function Wishlist({ userId, onCountChange }) {
+export default function Wishlist({ userId, onCountChange, selfUrl }) {
   const supabase = createClient()
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+
+  useScrollRestore(selfUrl, !loading)
 
   useEffect(() => {
     if (!userId) return
@@ -146,7 +149,7 @@ export default function Wishlist({ userId, onCountChange }) {
                       <strong>R{Number(listing.price || 0).toFixed(2)}</strong>
                       <span>{listing.condition || "Used"}</span>
                     </div>
-                    <Link href={`/market/${listing_id}`} className="view-button">
+                    <Link href={`/market/${listing_id}?from=${encodeURIComponent(selfUrl)}`} className="view-button">
                       View
                     </Link>
                   </div>

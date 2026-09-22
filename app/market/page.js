@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import MarketShell from '@/components/MarketShell'
@@ -24,5 +25,9 @@ export default async function MarketPage() {
   const displayName =
     profile?.full_name || user.user_metadata?.full_name || user.email
 
-  return <MarketShell displayName={displayName} />
+  return (
+    <Suspense fallback={null}>
+      <MarketShell displayName={displayName} />
+    </Suspense>
+  )
 }

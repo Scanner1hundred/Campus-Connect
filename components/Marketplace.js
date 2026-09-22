@@ -2,32 +2,43 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useScrollRestore } from "@/lib/useScrollRestore"
 
-export default function Marketplace({ search = "" }) {
+export default function Marketplace({ selfUrl }) {
   const supabase = createClient()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
 
   const [listings, setListings] = useState([])
   const [categories, setCategories] = useState([])
   const [favorites, setFavorites] = useState([])
 
-  const [selectedCategory, setSelectedCategory] = useState("all")
-
-  const [searchInput, setSearchInput] = useState(search || "")
-  const [activeSearch, setActiveSearch] = useState(search || "")
+  // Search text and the selected category both live in the URL now — that's
+  // what lets a listing's Back button return you to these exact filters,
+  // and what lets useScrollRestore key the saved scroll position on them.
+  const selectedCategory = searchParams.get("cat") || "all"
+  const activeSearch = searchParams.get("q") || ""
 
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState(null)
   const [error, setError] = useState("")
 
+  useScrollRestore(selfUrl, !loading)
+
   useEffect(() => {
     loadMarketplace()
   }, [])
 
-  useEffect(() => {
-    setSearchInput(search || "")
-    setActiveSearch(search || "")
-  }, [search])
+  function setSelectedCategory(categoryId) {
+    const next = new URLSearchParams(searchParams)
+    next.set("view", "market")
+    if (categoryId === "all") next.delete("cat")
+    else next.set("cat", categoryId)
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+  }
 
   async function loadMarketplace() {
     setLoading(true)
@@ -167,22 +178,6 @@ export default function Marketplace({ search = "" }) {
   }
 
   /*
-   * Search
-   */
-  function handleSearch(event) {
-    event.preventDefault()
-
-    setActiveSearch(
-      searchInput.trim()
-    )
-  }
-
-  function clearSearch() {
-    setSearchInput("")
-    setActiveSearch("")
-  }
-
-  /*
    * Favourite / unfavourite a listing
    */
   async function toggleFavorite(listingId) {
@@ -307,75 +302,9 @@ export default function Marketplace({ search = "" }) {
       </div>
 
       {/* ==================================================
-          ACTIONS
-      ================================================== */}
-
-      <div className="market-actions">
-        
-
-        <Link
-          href="/market/create"
-          className="sell-button"
-        >
-          + Sell an item
-        </Link>
-
-      </div>
-
-      {/* ==================================================
-          SEARCH
-      ================================================== */}
-
-      <section className="market-search-section">
-
-        <form
-          onSubmit={handleSearch}
-          className="market-search"
-        >
-
-          <div className="search-input-wrapper">
-
-            <span className="search-icon">
-              🔍
-            </span>
-
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(event) =>
-                setSearchInput(
-                  event.target.value
-                )
-              }
-              placeholder="Search marketplace..."
-            />
-
-            {searchInput && (
-              <button
-                type="button"
-                className="clear-search"
-                onClick={clearSearch}
-                aria-label="Clear search"
-              >
-                ×
-              </button>
-            )}
-
-          </div>
-
-          <button
-            type="submit"
-            className="search-button"
-          >
-            Search
-          </button>
-
-        </form>
-
-      </section>
-
-      {/* ==================================================
           CATEGORIES
+          (Search and "+ Sell an item" live on MarketShell's
+          Home view and header — not duplicated here.)
       ================================================== */}
 
       <section className="categories-section">
@@ -410,7 +339,6 @@ export default function Marketplace({ search = "" }) {
               setSelectedCategory("all")
             }
           >
-            <span>🛍️</span>
             All items
           </button>
 
@@ -434,8 +362,6 @@ export default function Marketplace({ search = "" }) {
                   )
                 }
               >
-                <span>📦</span>
-
                 {
                   category.category_name
                 }
@@ -702,7 +628,7 @@ export default function Marketplace({ search = "" }) {
                           </div>
 
                           <Link
-                            href={`/market/${listing.listing_id}`}
+                            href={`/market/${listing.listing_id}?from=${encodeURIComponent(selfUrl)}`}
                             className="view-button"
                           >
                             View

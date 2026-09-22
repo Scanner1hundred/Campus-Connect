@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useScrollRestore } from "@/lib/useScrollRestore"
 import Marketplace from "@/components/Marketplace"
 import MyListings from "@/components/MyListings"
 import Wishlist from "@/components/Wishlist"
+
+const VALID_VIEWS = ["home", "market", "myListings", "wishlist"]
 
 /* ---------- small inline icon set (no extra dependency) ---------- */
 const ICONS = {
@@ -85,9 +88,11 @@ function Icon({ name, size = 22 }) {
 }
 
 /* ---------- Home view: two action cards + recent listings ---------- */
-function MarketHome({ onBrowse }) {
+function MarketHome({ browseHref, selfUrl }) {
   const [recent, setRecent] = useState([])
   const [loading, setLoading] = useState(true)
+
+  useScrollRestore(selfUrl, !loading)
 
   useEffect(() => {
     const supabase = createClient()
@@ -127,7 +132,7 @@ function MarketHome({ onBrowse }) {
   return (
     <>
       <div className="ms-actions">
-        <button type="button" className="ms-action ms-action-browse" onClick={onBrowse}>
+        <Link href={browseHref} className="ms-action ms-action-browse">
           <span className="ms-action-icon">
             <Icon name="store" size={40} />
           </span>
@@ -136,7 +141,7 @@ function MarketHome({ onBrowse }) {
             <span>Find what you need</span>
           </span>
           <Icon name="chevron" size={26} />
-        </button>
+        </Link>
 
         {/* Same .sell-button as the marketplace view, just enlarged */}
         <Link href="/market/create" className="sell-button sell-button--large">
@@ -154,9 +159,9 @@ function MarketHome({ onBrowse }) {
       <section className="ms-recent">
         <div className="ms-section-head">
           <h2>Recent listings</h2>
-          <button type="button" className="ms-link-button" onClick={onBrowse}>
+          <Link href={browseHref} className="ms-link-button">
             View all
-          </button>
+          </Link>
         </div>
 
         {loading ? (
@@ -177,7 +182,10 @@ function MarketHome({ onBrowse }) {
 
               return (
                 <article className="listing-card" key={listing.listing_id}>
-                  <Link href={`/market/${listing.listing_id}`} className="recent-link">
+                  <Link
+                    href={`/market/${listing.listing_id}?from=${encodeURIComponent(selfUrl)}`}
+                    className="recent-link"
+                  >
                     <div className="listing-image">
                       {image ? (
                         <img src={image.image_url} alt={listing.title} />
@@ -205,9 +213,22 @@ function MarketHome({ onBrowse }) {
 
 /* ---------- Shell: header + sidebar + switchable content ---------- */
 export default function MarketShell({ displayName }) {
+  const router = useRouter()
   const pathname = usePathname()
-  const [view, setView] = useState("home") // "home" | "market" | "myListings" | "wishlist"
-  const [search, setSearch] = useState("")
+  const searchParams = useSearchParams()
+
+  // The tab, search text and (inside Marketplace) category all live in the
+  // URL now, not component state — so leaving to a listing and coming back
+  // (or hitting the browser Back button) lands exactly where you were.
+  const rawView = searchParams.get("view") || "home"
+  const view = VALID_VIEWS.includes(rawView) ? rawView : "home"
+  const search = searchParams.get("q") || ""
+
+  // The current /market URL, used as the "from" a listing link remembers
+  // so its own Back button returns here — filters and all.
+  const qs = searchParams.toString()
+  const selfUrl = qs ? `${pathname}?${qs}` : pathname
+
   const [userId, setUserId] = useState(null)
   const [myListingsCount, setMyListingsCount] = useState(0)
   const [wishlistCount, setWishlistCount] = useState(0)
@@ -244,16 +265,21 @@ export default function MarketShell({ displayName }) {
     loadUserAndCounts()
   }, [])
 
-  function showView(next) {
-    setView(next)
-    if (next !== "market") setSearch("")
+  function hrefForView(next) {
+    return next === "home" ? "/market" : `/market?view=${next}`
   }
 
   function handleSearch(e) {
     const value = e.target.value
-    setSearch(value)
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set("q", value)
+    else next.delete("q")
     // Searching from anywhere jumps straight to the full marketplace results
-    if (value.trim() && view !== "market") setView("market")
+    next.set("view", "market")
+    // A fresh search starts from "all categories" so results aren't hidden
+    // behind a category picked on a previous visit
+    if (view !== "market") next.delete("cat")
+    router.replace(`/market?${next.toString()}`, { scroll: false })
   }
 
   return (
@@ -290,47 +316,43 @@ export default function MarketShell({ displayName }) {
             All services
           </Link>
 
-          <button
-            type="button"
+          <Link
+            href={hrefForView("home")}
             className={view === "home" ? "ms-nav active" : "ms-nav"}
             aria-current={view === "home" ? "page" : undefined}
-            onClick={() => showView("home")}
           >
             <Icon name="home" />
             <span>Home</span>
-          </button>
+          </Link>
 
-          <button
-            type="button"
+          <Link
+            href={hrefForView("market")}
             className={view === "market" ? "ms-nav active" : "ms-nav"}
             aria-current={view === "market" ? "page" : undefined}
-            onClick={() => showView("market")}
           >
             <Icon name="store" />
             <span>Marketplace</span>
-          </button>
+          </Link>
 
-          <button
-            type="button"
+          <Link
+            href={hrefForView("myListings")}
             className={view === "myListings" ? "ms-nav active" : "ms-nav"}
             aria-current={view === "myListings" ? "page" : undefined}
-            onClick={() => showView("myListings")}
           >
             <Icon name="listings" />
             <span>My Listings</span>
             {myListingsCount > 0 && <em className="ms-count">{myListingsCount}</em>}
-          </button>
+          </Link>
 
-          <button
-            type="button"
+          <Link
+            href={hrefForView("wishlist")}
             className={view === "wishlist" ? "ms-nav active" : "ms-nav"}
             aria-current={view === "wishlist" ? "page" : undefined}
-            onClick={() => showView("wishlist")}
           >
             <Icon name="heart" />
             <span>Wishlist</span>
             {wishlistCount > 0 && <em className="ms-count">{wishlistCount}</em>}
-          </button>
+          </Link>
            <Link href="/market/rentals" className="ms-nav">
            <Icon name="listings" />
            <span>My Rentals</span>
@@ -353,13 +375,23 @@ export default function MarketShell({ displayName }) {
         </nav>
 
         <main className="ms-main">
-          {view === "home" && <MarketHome onBrowse={() => showView("market")} />}
-          {view === "market" && <Marketplace search={search} />}
+          {view === "home" && (
+            <MarketHome browseHref={hrefForView("market")} selfUrl={hrefForView("home")} />
+          )}
+          {view === "market" && <Marketplace selfUrl={selfUrl} />}
           {view === "myListings" && (
-            <MyListings userId={userId} onCountChange={setMyListingsCount} />
+            <MyListings
+              userId={userId}
+              onCountChange={setMyListingsCount}
+              selfUrl={hrefForView("myListings")}
+            />
           )}
           {view === "wishlist" && (
-            <Wishlist userId={userId} onCountChange={setWishlistCount} />
+            <Wishlist
+              userId={userId}
+              onCountChange={setWishlistCount}
+              selfUrl={hrefForView("wishlist")}
+            />
           )}
         </main>
       </div>

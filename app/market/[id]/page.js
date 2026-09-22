@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import SiteHeader from '@/components/SiteHeader'
+import MarketHeader from '@/components/MarketHeader'
 import SiteFooter from '@/components/SiteFooter'
 import ImageGallery from '@/components/ImageGallery'
 import ListingActions from '@/components/ListingActions'
@@ -9,11 +9,24 @@ import Stars from '@/components/Stars'
 import Icon from '@/components/Icon'
 import '@/app/market/market-pages.css'
 
-export default async function ListingPage({ params }) {
+export default async function ListingPage({ params, searchParams }) {
   const supabase = createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  // Where this listing was opened from — so Back returns there with its
+  // filters and scroll position intact, instead of always going to Home.
+  const backHref = searchParams?.from || '/market'
+  // This page's own URL, so a link further in (to the seller) can find its way back here.
+  const selfUrl = `/market/${params.id}${searchParams?.from ? `?from=${encodeURIComponent(searchParams.from)}` : ''}`
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .maybeSingle()
+  const displayName = profile?.full_name || user.user_metadata?.full_name || user.email
 
   const { data: listing } = await supabase
     .from('listings')
@@ -77,14 +90,14 @@ export default async function ListingPage({ params }) {
         : 'Unavailable'
 
   return (
-    <div className="lp">
-      <SiteHeader />
+    <div className="lp market-shell">
+      <MarketHeader displayName={displayName} backHref={backHref} backLabel="Back" />
 
       <main className="ld-main">
         <div className="lp-container">
           <div className="ld-content">
             <nav className="ld-breadcrumb">
-              <Link href="/market">Marketplace</Link>
+              <Link href={backHref}>Marketplace</Link>
               {categoryName && <><span>›</span><span>{categoryName}</span></>}
               {subCategoryName && <><span>›</span><span>{subCategoryName}</span></>}
             </nav>
@@ -147,7 +160,7 @@ export default async function ListingPage({ params }) {
                 <p className="ld-seller-line"><Icon name="pin" size={18} /> University of Fort Hare</p>
                 {joined && <p className="ld-seller-line"><Icon name="calendar" size={18} /> Joined: {joined}</p>}
 
-                <Link href={`/market/seller/${listing.seller_id}`} className="ld-btn outline ld-btn-sm">
+                <Link href={`/market/seller/${listing.seller_id}?from=${encodeURIComponent(selfUrl)}`} className="ld-btn outline ld-btn-sm">
                   View Seller Profile
                 </Link>
                 <p className="ld-note">
