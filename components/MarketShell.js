@@ -360,19 +360,16 @@ export default function MarketShell({ displayName }) {
 
 
 
-          {/* Not built yet: shown but not clickable, so nobody lands on a 404 */}
-          <span className="ms-nav ms-nav-disabled" aria-disabled="true">
-            <Icon name="bell" />
-            <span>Notifications</span>
-            <em className="ms-soon">Soon</em>
-          </span>
+          {/* Built*/}
+          <Link href="/market/notifications" className="ms-nav">
+             <Icon name="bell" />
+             <span>Notifications</span>
+          </Link>
 
-          <span className="ms-nav ms-nav-disabled" aria-disabled="true">
-            <Icon name="message" />
-            <span>Messages</span>
-            <em className="ms-soon">Soon</em>
-          </span>
-        </nav>
+          <Link href="/market/messages" className="ms-nav">
+             <Icon name="message" />
+             <span>Messages</span>
+           </Link>
 
         <main className="ms-main">
           {view === "home" && (

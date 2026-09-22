@@ -8,7 +8,7 @@ import Icon from "@/components/Icon"
 import { money } from "@/lib/cards"
 
 // Buy / Rent / message buttons on the listing page.
-export default function ListingActions({ listing, isOwner }) {
+export default function ListingActions({ listing, isOwner, messageHref }) {
   const [mode, setMode] = useState(null) // "buy" | "rent" | null
   const [done, setDone] = useState(null)
 
@@ -34,7 +34,16 @@ export default function ListingActions({ listing, isOwner }) {
     )
   }
 
-  if (isOwner) return <p className="ld-owner-note">This is your listing.</p>
+    if (isOwner) {
+    return (
+      <div className="ld-owner-note">
+        <p>This is your listing.</p>
+        <Link href={`/market/${listing.listing_id}/edit`} className="ld-btn outline ld-btn-sm">
+          Edit listing
+        </Link>
+      </div>
+    )
+  }
   if (!available) return null
 
   return (
@@ -62,9 +71,9 @@ export default function ListingActions({ listing, isOwner }) {
             <Icon name="calendar" size={20} /> Rent from {money(listing.rent_price_monthly)}/mo
           </button>
         )}
-        <button type="button" className="ld-btn outline" disabled title="Messages are coming soon">
-          <Icon name="message" size={20} /> Message Seller (soon)
-        </button>
+        <Link href={messageHref} className="ld-btn outline">
+          <Icon name="message" size={20} /> Message Seller
+        </Link>
       </div>
 
       {mode === "buy" && (

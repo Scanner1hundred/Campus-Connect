@@ -114,7 +114,11 @@ export default async function ListingPage({ params, searchParams }) {
                   {badgeText}
                 </span>
 
-                <ListingActions listing={listing} isOwner={isOwner} />
+                <ListingActions
+                  listing={listing}
+                  isOwner={isOwner}
+                  messageHref={`/market/messages?listing=${listing.listing_id}&with=${listing.seller_id}&from=${encodeURIComponent(selfUrl)}`}
+                />
               </div>
             </section>
 
