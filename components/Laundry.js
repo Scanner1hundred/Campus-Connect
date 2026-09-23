@@ -317,7 +317,7 @@ export default function Laundry({ displayName = '', isAdmin = false }) {
           <span className="ms-brand-text">Campus Connect</span>
         </Link>
         {isAdmin && (
-          <Link href="/market/admin/laundry" className="mh-view-toggle">Admin view</Link>
+        <Link href="/laundry/admin" className="mh-view-toggle">Admin view</Link>
         )}
         <Link href={`/profile?from=${encodeURIComponent(pathname)}`} className="ms-user">
           <span className="ms-avatar" aria-hidden="true">
@@ -328,6 +328,7 @@ export default function Laundry({ displayName = '', isAdmin = false }) {
       </header>
 
       <div className="ln-wrap">
+        <Link href="/" className="ln-back">&larr; Back to home</Link>
         <h1 className="ln-title">Laundry Booking</h1>
 
         <section className="ln-card" aria-label="My upcoming bookings">

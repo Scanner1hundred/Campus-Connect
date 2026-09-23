@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { money } from '@/lib/cards';
-import '@/app/market/admin/laundry/admin.css';
+import '@/app/laundry/admin/admin.css';
 
 const TZ = 'Africa/Johannesburg';
 const UTC_OFFSET = '+02:00';

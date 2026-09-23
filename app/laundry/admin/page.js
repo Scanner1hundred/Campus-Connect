@@ -28,7 +28,7 @@ export default async function AdminLaundryPage() {
 
   return (
     <div className="market-shell">
-      <MarketHeader displayName={displayName} backHref="/laundry" backLabel="Back to Laundry" showAdminToggle />
+      <MarketHeader displayName={displayName} backHref="/laundry" backLabel="Back to Laundry" showAdminToggle studentHref="/laundry" />
       <AdminLaundry />
     </div>
   )

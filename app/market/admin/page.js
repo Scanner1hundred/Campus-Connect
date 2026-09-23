@@ -31,11 +31,7 @@ export default async function AdminDashboardPage() {
       title: 'Rental breakage reports',
       description: 'Review reported issues, approve or reject refunds.',
     },
-    {
-      href: '/market/admin/laundry',
-      title: 'Laundry machines & bookings',
-      description: 'Add or take machines offline, look up bookings by day.',
-    },
+    
   ]
 
   return (
