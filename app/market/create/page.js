@@ -10,11 +10,11 @@ export default async function MarketCreatePage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name')
-    .eq('id', user.id)
-    .maybeSingle()
+  const [{ data: profile }, { data: roleRow }] = await Promise.all([
+    supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle(),
+    supabase.from('user_roles').select('role').eq('user_id', user.id).maybeSingle(),
+  ])
+  if (roleRow?.role === 'admin') redirect('/market')
 
   const displayName = profile?.full_name || user.user_metadata?.full_name || user.email
 

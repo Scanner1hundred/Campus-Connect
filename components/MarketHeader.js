@@ -2,7 +2,9 @@ import Link from "next/link"
 import "@/app/market/header.css"
 
 // Same navy header as MarketShell, for standalone market pages (sell form, My Rentals, admin).
-export default function MarketHeader({ displayName = "", backHref = "/market", backLabel = "Back to marketplace" }) {
+// Pass showAdminToggle to render a small "Switch to student view" link —
+// use on any admin page so an admin account can jump back to /market.
+export default function MarketHeader({ displayName = "", backHref = "/market", backLabel = "Back to marketplace", showAdminToggle = false }) {
   const initial = (displayName || "?").trim().charAt(0).toUpperCase()
 
   return (
@@ -17,6 +19,10 @@ export default function MarketHeader({ displayName = "", backHref = "/market", b
       </Link>
 
       <Link href={backHref} className="mh-back">&larr; {backLabel}</Link>
+
+      {showAdminToggle && (
+        <Link href="/market" className="mh-view-toggle">Switch to student view</Link>
+      )}
 
       {displayName && (
         <Link href="/profile" className="ms-user">

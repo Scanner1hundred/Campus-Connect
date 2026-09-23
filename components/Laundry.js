@@ -144,7 +144,7 @@ function Timeline({ steps }) {
 /* ------------------------------------------------------------------ */
 /* Main component                                                      */
 /* ------------------------------------------------------------------ */
-export default function Laundry({ displayName = '' }) {
+export default function Laundry({ displayName = '', isAdmin = false }) {
   const supabase = useMemo(() => createClient(), []);
 
   const [cycle, setCycle] = useState('both');
@@ -316,6 +316,9 @@ export default function Laundry({ displayName = '' }) {
           <BrandLogo />
           <span className="ms-brand-text">Campus Connect</span>
         </Link>
+        {isAdmin && (
+          <Link href="/market/admin/laundry" className="mh-view-toggle">Admin view</Link>
+        )}
         <Link href={`/profile?from=${encodeURIComponent(pathname)}`} className="ms-user">
           <span className="ms-avatar" aria-hidden="true">
             {(displayName || '?').trim().charAt(0).toUpperCase()}

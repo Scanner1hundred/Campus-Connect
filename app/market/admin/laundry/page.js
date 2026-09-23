@@ -1,10 +1,15 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import MarketHeader from '@/components/MarketHeader'
-import AdminRentalIssues from '@/components/AdminRentalIssues'
+import AdminLaundry from '@/components/AdminLaundry'
 
-// Admin-only: review breakage reports. (The database functions check the role again.)
-export default async function AdminRentalsPage() {
+export const metadata = {
+  title: 'Laundry Admin | Campus Connect',
+}
+
+// Admin-only: add/remove machines, look up bookings by day.
+// (laundry_machines/laundry_bookings RLS checks the role again.)
+export default async function AdminLaundryPage() {
   const supabase = createClient()
 
   const {
@@ -17,14 +22,14 @@ export default async function AdminRentalsPage() {
     supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle(),
   ])
 
-  if (role?.role !== 'admin') redirect('/market')
+  if (role?.role !== 'admin') redirect('/laundry')
 
   const displayName = profile?.full_name || user.user_metadata?.full_name || user.email
 
   return (
     <div className="market-shell">
-      <MarketHeader displayName={displayName} backHref="/market/rentals" backLabel="Back to My Rentals" showAdminToggle />
-      <AdminRentalIssues />
+      <MarketHeader displayName={displayName} backHref="/laundry" backLabel="Back to Laundry" showAdminToggle />
+      <AdminLaundry />
     </div>
   )
 }

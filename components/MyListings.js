@@ -5,7 +5,7 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useScrollRestore } from "@/lib/useScrollRestore"
 
-export default function MyListings({ userId, onCountChange, selfUrl }) {
+     export default function MyListings({ userId, onCountChange, selfUrl, isAdmin }) {
   const supabase = createClient()
 
   const [listings, setListings] = useState([])
@@ -55,9 +55,11 @@ export default function MyListings({ userId, onCountChange, selfUrl }) {
           <p className="eyebrow">YOUR ACCOUNT</p>
           <h2>My Listings</h2>
         </div>
+        {!isAdmin && (
         <Link href="/market/create" className="sell-button">
           + Add listing
         </Link>
+        )}
       </div>
 
       {error && (
@@ -78,9 +80,11 @@ export default function MyListings({ userId, onCountChange, selfUrl }) {
           <div className="empty-icon">📦</div>
           <h3>You have no listings</h3>
           <p>Items you put up for sale will appear here.</p>
+          {!isAdmin && (
           <Link href="/market/create" className="sell-button">
-            Sell your first item
+          + Add listing
           </Link>
+          )}
         </div>
       )}
 

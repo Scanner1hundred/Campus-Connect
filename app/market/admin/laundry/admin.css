@@ -1,0 +1,250 @@
+/* Laundry admin. Prefixed "la-" so it can't clash with globals.css,
+   rentals.css ("rt-") or the student laundry page ("ln-"). Reuses the
+   --ms-* colour tokens already defined on .market-shell. */
+
+.la-wrap {
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+.la-head h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+}
+
+.la-head p {
+  margin: 0 0 22px;
+  color: var(--ms-muted);
+  line-height: 1.5;
+}
+
+.la-card {
+  background: #fff;
+  border: 1px solid var(--ms-line);
+  border-radius: 16px;
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.la-card h2 {
+  margin: 0 0 6px;
+  font-size: 19px;
+}
+
+.la-cap {
+  margin: 0 0 16px;
+  color: var(--ms-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.la-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--ms-muted);
+  font-size: 14px;
+}
+
+.la-error {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 14px;
+}
+
+/* ---------- machine list ---------- */
+.la-machine-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.la-machine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ms-line);
+  border-radius: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.la-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.la-dot.is-on {
+  background: var(--ms-green);
+}
+
+.la-dot.is-off {
+  background: #cbd5e1;
+}
+
+.la-machine-name {
+  font-weight: 600;
+  color: var(--ms-ink);
+  flex: 1 1 auto;
+  min-width: 100px;
+}
+
+.la-machine-type,
+.la-machine-status {
+  font-size: 13px;
+  color: var(--ms-muted);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+}
+
+/* ---------- buttons ---------- */
+.la-btn {
+  appearance: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.la-btn.primary {
+  background: var(--ms-blue);
+  color: #fff;
+}
+
+.la-btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.la-btn.outline {
+  background: #fff;
+  border-color: var(--ms-line);
+  color: var(--ms-ink);
+}
+
+.la-btn.danger {
+  background: #fff;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.la-btn.outline:hover {
+  border-color: var(--ms-blue);
+}
+
+.la-btn.danger:hover {
+  background: #fef2f2;
+}
+
+/* ---------- add machine form ---------- */
+.la-add-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--ms-line);
+}
+
+.la-input {
+  flex: 1 1 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--ms-line);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+}
+
+.la-select {
+  padding: 10px 12px;
+  border: 1px solid var(--ms-line);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  background: #fff;
+}
+
+/* ---------- day picker ---------- */
+.la-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.la-day-label {
+  font-weight: 600;
+  color: var(--ms-ink);
+}
+
+.la-date {
+  padding: 8px 10px;
+  border: 1px solid var(--ms-line);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+}
+
+/* ---------- bookings table ---------- */
+.la-section {
+  margin: 18px 0 10px;
+  font-size: 15px;
+  color: var(--ms-ink);
+}
+
+.la-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.la-table th,
+.la-table td {
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--ms-line);
+}
+
+.la-table th {
+  color: var(--ms-muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.la-table.is-muted {
+  color: var(--ms-muted);
+}
+
+.la-ref {
+  font-variant-numeric: tabular-nums;
+  color: var(--ms-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .la-wrap {
+    padding: 18px 14px 48px;
+  }
+
+  .la-table {
+    display: block;
+    overflow-x: auto;
+  }
+}

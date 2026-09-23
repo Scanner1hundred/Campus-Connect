@@ -8,7 +8,7 @@ import Icon from "@/components/Icon"
 import { money } from "@/lib/cards"
 
 // Buy / Rent / message buttons on the listing page.
-export default function ListingActions({ listing, isOwner, messageHref }) {
+export default function ListingActions({ listing, isOwner, isAdmin, messageHref }) {
   const [mode, setMode] = useState(null) // "buy" | "rent" | null
   const [done, setDone] = useState(null)
 
@@ -34,7 +34,7 @@ export default function ListingActions({ listing, isOwner, messageHref }) {
     )
   }
 
-    if (isOwner) {
+  if (isOwner) {
     return (
       <div className="ld-owner-note">
         <p>This is your listing.</p>
@@ -44,6 +44,23 @@ export default function ListingActions({ listing, isOwner, messageHref }) {
       </div>
     )
   }
+
+  // Admins can browse and message, but buying/renting/selling is blocked —
+  // also enforced in purchase_listing/start_rental/buyout_rental themselves,
+  // this is just so the buttons aren't shown as if they'd work.
+  if (isAdmin) {
+    return (
+      <div className="ld-actions">
+        <p className="ld-owner-note">Admin accounts can't buy or rent items.</p>
+        {messageHref && (
+          <Link href={messageHref} className="ld-btn outline">
+            <Icon name="message" size={20} /> Message Seller
+          </Link>
+        )}
+      </div>
+    )
+  }
+
   if (!available) return null
 
   return (
@@ -71,9 +88,15 @@ export default function ListingActions({ listing, isOwner, messageHref }) {
             <Icon name="calendar" size={20} /> Rent from {money(listing.rent_price_monthly)}/mo
           </button>
         )}
-        <Link href={messageHref} className="ld-btn outline">
-          <Icon name="message" size={20} /> Message Seller
-        </Link>
+        {messageHref ? (
+          <Link href={messageHref} className="ld-btn outline">
+            <Icon name="message" size={20} /> Message Seller
+          </Link>
+        ) : (
+          <button type="button" className="ld-btn outline" disabled title="Messages are coming soon">
+            <Icon name="message" size={20} /> Message Seller (soon)
+          </button>
+        )}
       </div>
 
       {mode === "buy" && (

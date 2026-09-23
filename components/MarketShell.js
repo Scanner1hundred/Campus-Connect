@@ -88,7 +88,7 @@ function Icon({ name, size = 22 }) {
 }
 
 /* ---------- Home view: two action cards + recent listings ---------- */
-function MarketHome({ browseHref, selfUrl }) {
+function MarketHome({ browseHref, selfUrl, isAdmin }) {
   const [recent, setRecent] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -144,6 +144,7 @@ function MarketHome({ browseHref, selfUrl }) {
         </Link>
 
         {/* Same .sell-button as the marketplace view, just enlarged */}
+        {!isAdmin && (
         <Link href="/market/create" className="sell-button sell-button--large">
           <span className="ms-action-icon">
             <Icon name="plus" size={40} />
@@ -154,6 +155,7 @@ function MarketHome({ browseHref, selfUrl }) {
           </span>
           <Icon name="chevron" size={26} />
         </Link>
+         )}
       </div>
 
       <section className="ms-recent">
@@ -230,6 +232,7 @@ export default function MarketShell({ displayName }) {
   const selfUrl = qs ? `${pathname}?${qs}` : pathname
 
   const [userId, setUserId] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [myListingsCount, setMyListingsCount] = useState(0)
   const [wishlistCount, setWishlistCount] = useState(0)
 
@@ -246,6 +249,13 @@ export default function MarketShell({ displayName }) {
       if (!user) return
 
       setUserId(user.id)
+
+      const { data: roleRow } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      setIsAdmin(roleRow?.role === 'admin')
 
       const [{ count: listingsCount }, { count: favoritesCount }] = await Promise.all([
         supabase
@@ -370,11 +380,22 @@ export default function MarketShell({ displayName }) {
              <Icon name="message" />
              <span>Messages</span>
            </Link>
+           <Link href="/market/messages" className="ms-nav">
+             <Icon name="message" />
+             <span>Messages</span>
+           </Link>
+
+           {isAdmin && (
+             <Link href="/market/admin" className="ms-nav">
+               <Icon name="bell" />
+               <span>Admin view</span>
+             </Link>
+           )}
            </nav>
 
         <main className="ms-main">
           {view === "home" && (
-            <MarketHome browseHref={hrefForView("market")} selfUrl={hrefForView("home")} />
+            <MarketHome browseHref={hrefForView("market")} selfUrl={hrefForView("home")} isAdmin={isAdmin} />
           )}
           {view === "market" && <Marketplace selfUrl={selfUrl} />}
           {view === "myListings" && (
@@ -382,6 +403,7 @@ export default function MarketShell({ displayName }) {
               userId={userId}
               onCountChange={setMyListingsCount}
               selfUrl={hrefForView("myListings")}
+              isAdmin={isAdmin}
             />
           )}
           {view === "wishlist" && (

@@ -616,3 +616,11 @@
     flex-wrap: wrap;
   }
 }
+.mh-view-toggle {
+  font-size: 0.8rem;
+  color: #1266f1;
+  text-decoration: none;
+  border: 1px solid #1266f1;
+  border-radius: 999px;
+  padding: 0.25rem 0.8rem;
+}

@@ -74,6 +74,12 @@ export default async function ListingPage({ params, searchParams }) {
   const subCategoryName = listing.subcategories?.sub_category_name
   const isAvailable = listing.status === 'active'
   const isOwner = user.id === listing.seller_id
+  const { data: roleRow } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const isAdmin = roleRow?.role === 'admin'
   const sellerName = seller?.full_name || 'Campus seller'
   const joined = seller?.created_at
     ? new Date(seller.created_at).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })
@@ -117,7 +123,9 @@ export default async function ListingPage({ params, searchParams }) {
                 <ListingActions
                   listing={listing}
                   isOwner={isOwner}
+                  isAdmin={isAdmin}
                   messageHref={`/market/messages?listing=${listing.listing_id}&with=${listing.seller_id}&from=${encodeURIComponent(selfUrl)}`}
+            
                 />
               </div>
             </section>

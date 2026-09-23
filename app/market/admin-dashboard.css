@@ -1,0 +1,19 @@
+.admin-dashboard { max-width: 800px; }
+.admin-dashboard h1 { margin-bottom: 1rem; }
+.admin-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+.admin-dashboard-card {
+  display: block;
+  border: 1px solid #e3e8ef;
+  border-radius: 12px;
+  padding: 1rem 1.2rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+.admin-dashboard-card:hover { border-color: #1266f1; }
+.admin-dashboard-card h2 { font-size: 1rem; margin: 0 0 0.3rem; }
+.admin-dashboard-card p { margin: 0; font-size: 0.85rem; color: #5b6674; }
