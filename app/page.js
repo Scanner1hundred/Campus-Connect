@@ -34,7 +34,7 @@ export default function Home() {
             <img src="/crest.png" alt="University of Fort Hare crest" className="lp-crest" /> 
             <div>
               <p className="lp-brand-name">University of Fort Hare</p>
-              <p className="lp-brand-tagline">TOGETHER IN EXCELLENCE</p>
+              <p className="lp-brand-tagline">Campus Connect</p>
             </div>
           </div>
 
@@ -52,11 +52,6 @@ export default function Home() {
         <div className="lp-container lp-hero">
           <div className="lp-hero-text">
             <h1>Welcome to Campus Connect</h1>
-            <p>
-              Find great deals on laptops, fridges and electronics from fellow students
-              and trusted campus traders. Buy, sell and upgrade your student essentials,
-              all in one place.
-            </p>
           </div>
 
           <div className="lp-cards">

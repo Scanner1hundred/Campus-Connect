@@ -55,7 +55,7 @@
 .lp-logout:hover { filter: brightness(0.95); }
 
 /* Hero */
-.lp-main { flex: 1; display: flex; align-items: center; padding: 60px 0; }
+.lp-main { flex: 1; display: flex; align-items: center; padding: 40px 0; }
 .lp-hero {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -63,18 +63,11 @@
   gap: 48px;
 }
 .lp-hero-text h1 {
-  margin: 0 0 24px;
+  margin: 0;
   max-width: 420px;
   font-size: 54px;
   line-height: 1.22;
   color: var(--navy);
-}
-.lp-hero-text p {
-  max-width: 520px;
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.8;
-  color: var(--muted);
 }
 
 /* Marketplace card */
