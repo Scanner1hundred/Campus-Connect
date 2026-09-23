@@ -6,7 +6,12 @@
 -- This file reflects the live database after the cleanup
 -- migration (migration_cleanup.sql) removed 14 unrelated/
 -- duplicate tables and restored `profiles`, plus section 9
--- (UFH domain restriction + roles).
+-- (UFH domain restriction + roles), the MARKETPLACE v2
+-- commits (rent rules, buy/rentals, seller reviews, rent-
+-- to-buy + refunds), the laundry module, messaging/
+-- notifications (c6, verified against live info_schema on
+-- 22 Sept 2026), and the admin purchase/rental restrictions
+-- (c7).
 --
 -- DASHBOARD CONTRACT (use these names, don't invent new ones):
 --   roles ........ app_role: 'student' | 'admin'      (table user_roles.role)
@@ -1450,3 +1455,507 @@ revoke all on function cancel_laundry_booking(uuid)             from public, ano
 grant execute on function laundry_availability(date)            to authenticated;
 grant execute on function book_laundry_slot(timestamptz, text)  to authenticated;
 grant execute on function cancel_laundry_booking(uuid)          to authenticated;
+
+-- =======================================================
+-- MARKETPLACE v2: c6_messaging_notifications.sql
+-- =======================================================
+-- ============================================================================
+-- c6_messaging_notifications.sql  (v2 — verified against the live database's
+-- information_schema on 22 Sept 2026, not guessed from docs)
+--
+-- Unlike the first draft, this does NOT touch the `messages` or
+-- `notifications` tables' existing structure or RLS — both already exist
+-- with real rows/policies and are extended in place, not dropped.
+-- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 1. RESERVE FOR BUYER — seller-only, only for someone who has actually
+--    messaged them about this listing.
+-- ---------------------------------------------------------------------------
+alter table public.listings
+  add column if not exists reserved_for uuid references auth.users(id) on delete set null;
+
+create or replace function public.reserve_listing_for(p_listing_id uuid, p_buyer_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_seller uuid;
+begin
+  select seller_id into v_seller from listings where listing_id = p_listing_id;
+  if v_seller is null then
+    raise exception 'listing not found';
+  end if;
+  if v_seller <> auth.uid() then
+    raise exception 'only the seller can reserve this listing';
+  end if;
+
+  if p_buyer_id is not null and not exists (
+    select 1 from messages
+    where listing_id = p_listing_id
+      and sender_id = p_buyer_id
+      and receiver_id = v_seller
+  ) then
+    raise exception 'that person has not messaged you about this listing';
+  end if;
+
+  update listings set reserved_for = p_buyer_id where listing_id = p_listing_id;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 2. MESSAGE THREADS — the `messages` table itself is untouched; it already
+--    has everything a per-listing chat needs (sender_id, receiver_id,
+--    listing_id, message, is_read). This view just groups it into threads
+--    for the inbox.
+-- ---------------------------------------------------------------------------
+create or replace view public.my_message_threads as
+select
+  m.listing_id,
+  l.title as listing_title,
+  case when m.sender_id = auth.uid() then m.receiver_id else m.sender_id end as counterpart_id,
+  max(m.created_at) as last_at,
+  (array_agg(m.message order by m.created_at desc))[1] as last_message,
+  count(*) filter (where m.receiver_id = auth.uid() and m.is_read = false) as unread_count
+from messages m
+join listings l on l.listing_id = m.listing_id
+where m.sender_id = auth.uid() or m.receiver_id = auth.uid()
+group by m.listing_id, l.title, counterpart_id;
+
+-- ---------------------------------------------------------------------------
+-- 3. EDIT LISTING — whitelists editable fields only; status/seller_id/is_demo
+--    are never touched here (also closes the RLS gap from docs §3/§10 for
+--    listings edited through this path).
+-- ---------------------------------------------------------------------------
+create or replace function public.update_listing(
+  p_listing_id          uuid,
+  p_title               text,
+  p_description         text,
+  p_price               numeric,
+  p_sub_category_id     uuid,
+  p_condition           text,
+  p_rent_price_monthly  numeric,
+  p_rent_to_buy_enabled boolean
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_seller uuid;
+  v_status text;
+begin
+  select seller_id, status into v_seller, v_status
+  from listings where listing_id = p_listing_id;
+
+  if v_seller is null then
+    raise exception 'listing not found';
+  end if;
+  if v_seller <> auth.uid() then
+    raise exception 'not your listing';
+  end if;
+  if v_status <> 'active' then
+    raise exception 'only active listings can be edited';
+  end if;
+
+  update listings
+  set title               = p_title,
+      description          = p_description,
+      price                = p_price,
+      sub_category_id      = p_sub_category_id,
+      condition            = p_condition,
+      rent_price_monthly   = p_rent_price_monthly,
+      rent_to_buy_enabled  = p_rent_to_buy_enabled
+  where listing_id = p_listing_id;
+end;
+$$;
+-- enforce_rent_rules (already in your schema) still fires on this UPDATE and
+-- rejects rent settings on a non-eligible subcategory or rent-to-buy under
+-- R2000 — no duplicate validation needed here.
+
+-- ---------------------------------------------------------------------------
+-- 4. NOTIFICATIONS — extend the existing table in place (add nullable
+--    linking columns), don't touch its existing rows/select policy.
+--    `type` is a plain varchar live, not enum-constrained (confirmed), so
+--    the new type strings below insert fine alongside the existing values.
+-- ---------------------------------------------------------------------------
+alter table public.notifications add column if not exists listing_id      uuid references public.listings(listing_id) on delete cascade;
+alter table public.notifications add column if not exists order_id       uuid references public.orders(order_id) on delete cascade;
+alter table public.notifications add column if not exists rental_id      uuid references public.rentals(rental_id) on delete cascade;
+alter table public.notifications add column if not exists rental_issue_id uuid references public.rental_issues(issue_id) on delete cascade;
+
+-- Users could view their own notifications but not mark them read — adding
+-- that policy (additive, doesn't touch the existing select policy).
+drop policy if exists "Users can update their own notifications" on public.notifications;
+create policy "Users can update their own notifications"
+  on public.notifications for update
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+create or replace function public.create_notification(
+  p_user_id         uuid,
+  p_type            text,
+  p_title           text,
+  p_message         text default null,
+  p_listing_id      uuid default null,
+  p_order_id        uuid default null,
+  p_rental_id       uuid default null,
+  p_rental_issue_id uuid default null
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into notifications (user_id, type, title, message, listing_id, order_id, rental_id, rental_issue_id)
+  values (p_user_id, p_type, p_title, p_message, p_listing_id, p_order_id, p_rental_id, p_rental_issue_id);
+end;
+$$;
+
+-- 4a. Sale + Purchase — orders already carries buyer_id AND seller_id
+--     directly, so no join through order_items is even needed to find who
+--     to notify; it's only used here to grab the listing title for the text.
+create or replace function public.notify_on_order_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_title text;
+begin
+  select l.title into v_title
+  from order_items oi
+  join listings l on l.listing_id = oi.listing_id
+  where oi.order_id = new.order_id
+  limit 1;
+
+  if new.seller_id is not null then
+    perform create_notification(
+      new.seller_id, 'sale', 'Your item sold',
+      coalesce(v_title, 'Your listing') || ' just sold.', null, new.order_id
+    );
+  end if;
+
+  perform create_notification(
+    new.buyer_id, 'purchase', 'Purchase confirmed',
+    'Your order for ' || coalesce(v_title, 'an item') || ' is confirmed.', null, new.order_id
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_notify_on_order_insert on orders;
+create trigger trg_notify_on_order_insert
+  after insert on orders
+  for each row execute function notify_on_order_insert();
+
+-- 4b. Rental payment (renter charged) + rent payment (owner paid out)
+create or replace function public.notify_on_rental_charge_paid()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_renter uuid;
+  v_title  text;
+begin
+  if new.status = 'paid' and (old.status is distinct from 'paid') then
+    select r.renter_id, r.listing_title into v_renter, v_title
+    from rentals r where r.rental_id = new.rental_id;
+
+    perform create_notification(
+      v_renter, 'rental_payment', 'Rental payment taken',
+      'R' || new.amount || ' was charged for your rental of ' || coalesce(v_title, 'an item') || '.',
+      null, null, new.rental_id
+    );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_notify_on_rental_charge_paid on rental_charges;
+create trigger trg_notify_on_rental_charge_paid
+  after update on rental_charges
+  for each row execute function notify_on_rental_charge_paid();
+
+create or replace function public.notify_on_rental_payout_released()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_owner uuid;
+  v_title text;
+begin
+  if new.status = 'released' and (old.status is distinct from 'released') then
+    select r.owner_id, r.listing_title into v_owner, v_title
+    from rentals r where r.rental_id = new.rental_id;
+
+    perform create_notification(
+      v_owner, 'rent_payment', 'Rent payment released',
+      'R' || new.amount || ' was paid out to you for ' || coalesce(v_title, 'your rental') || '.',
+      null, null, new.rental_id
+    );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_notify_on_rental_payout_released on rental_payouts;
+create trigger trg_notify_on_rental_payout_released
+  after update on rental_payouts
+  for each row execute function notify_on_rental_payout_released();
+
+-- 4c. Admin review — fires when a breakage report leaves 'reported' into
+--     'approved'/'rejected' (not 'auto_refunded' — that path is instant and
+--     never goes through an admin, per docs §9.7). Notifies both sides.
+create or replace function public.notify_on_rental_issue_resolved()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_renter  uuid;
+  v_owner   uuid;
+  v_title   text;
+  v_outcome text;
+begin
+  if new.status in ('approved', 'rejected') and (old.status is distinct from new.status) then
+    select r.renter_id, r.owner_id, r.listing_title into v_renter, v_owner, v_title
+    from rentals r where r.rental_id = new.rental_id;
+
+    v_outcome := case when new.status = 'approved' then 'approved — you have been refunded'
+                       else 'reviewed — no refund was issued' end;
+
+    perform create_notification(
+      v_renter, 'admin_review', 'Your breakage report was reviewed',
+      'Your report on ' || coalesce(v_title, 'your rental') || ' was ' || v_outcome || '.',
+      null, null, new.rental_id, new.issue_id
+    );
+    perform create_notification(
+      v_owner, 'admin_review', 'A breakage report on your item was reviewed',
+      'The report on ' || coalesce(v_title, 'your item') || ' was ' || v_outcome || '.',
+      null, null, new.rental_id, new.issue_id
+    );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_notify_on_rental_issue_resolved on rental_issues;
+create trigger trg_notify_on_rental_issue_resolved
+  after update on rental_issues
+  for each row execute function notify_on_rental_issue_resolved();
+
+-- =======================================================
+-- MARKETPLACE v2: c7_admin_restrictions.sql
+-- =======================================================
+-- ============================================================================
+-- c7_admin_restrictions.sql
+-- Admin accounts can browse everything but cannot buy, rent, buy-out, or
+-- create listings — enforced here, not just hidden in the UI.
+-- ============================================================================
+
+-- Sellers can't be admins (blocks creating a listing at the DB level).
+drop policy if exists "Sellers can insert their own listings" on listings;
+create policy "Sellers can insert their own listings"
+  on listings for insert
+  with check (seller_id = auth.uid() and not public.is_admin());
+
+-- purchase_listing — unchanged except the added admin guard after the login check.
+create or replace function public.purchase_listing(
+  p_listing_id uuid,
+  p_method payment_method default 'card',
+  p_card_id uuid default null
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_l listings%rowtype;
+  v_order uuid;
+begin
+  if v_uid is null then raise exception 'Please log in first.'; end if;
+  if public.is_admin() then raise exception 'Admin accounts cannot make purchases.'; end if;
+  if p_method not in ('card','cash') then raise exception 'Unsupported payment method.'; end if;
+
+  select * into v_l from listings where listing_id = p_listing_id for update;
+  if not found or v_l.status <> 'active' then raise exception 'This item is no longer available.'; end if;
+  if v_l.seller_id = v_uid then raise exception 'You cannot buy your own listing.'; end if;
+  if p_method = 'card' and not exists (
+    select 1 from saved_cards where card_id = p_card_id and user_id = v_uid
+  ) then raise exception 'Please choose a valid card.'; end if;
+
+  insert into orders (buyer_id, seller_id, total_amount, status)
+  values (v_uid, v_l.seller_id, v_l.price, 'confirmed')
+  returning order_id into v_order;
+
+  insert into order_items (order_id, listing_id, quantity, unit_price, subtotal)
+  values (v_order, v_l.listing_id, 1, v_l.price, v_l.price);
+
+  insert into payments (order_id, amount, payment_method, payment_reference, status)
+  values (v_order, v_l.price, p_method,
+          'DEMO-' || upper(substr(md5(random()::text), 1, 10)),
+          (case when p_method = 'card' then 'completed' else 'pending' end)::payment_status);
+
+  update listings set status = 'sold', updated_at = now() where listing_id = v_l.listing_id;
+  return v_order;
+end $$;
+
+-- start_rental — unchanged except the added admin guard after the login check.
+create or replace function public.start_rental(
+  p_listing_id uuid,
+  p_term_months int,
+  p_card_id uuid
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_l listings%rowtype;
+  v_sub subcategories%rowtype;
+  v_rental uuid;
+  v_start date := current_date;
+  v_max int;
+  v_rent numeric;
+  k int;
+begin
+  if v_uid is null then raise exception 'Please log in first.'; end if;
+  if public.is_admin() then raise exception 'Admin accounts cannot rent items.'; end if;
+
+  select * into v_l from listings where listing_id = p_listing_id for update;
+  if not found or v_l.status <> 'active' then raise exception 'This item is no longer available.'; end if;
+  if v_l.rent_price_monthly is null then raise exception 'This item is not available for rent.'; end if;
+  if v_l.seller_id = v_uid then raise exception 'You cannot rent your own listing.'; end if;
+
+  select * into v_sub from subcategories where sub_category_id = v_l.sub_category_id;
+  if not found or not v_sub.rent_eligible then
+    raise exception 'This kind of item cannot be rented.';
+  end if;
+
+  v_max := case when v_l.rent_to_buy_enabled then 10 else 6 end;
+  if p_term_months < v_sub.rent_min_months then
+    raise exception 'The minimum rental for this item is % month(s).', v_sub.rent_min_months;
+  end if;
+  if p_term_months > v_max then
+    raise exception 'The maximum rental for this item is % months.', v_max;
+  end if;
+
+  if not exists (select 1 from saved_cards where card_id = p_card_id and user_id = v_uid) then
+    raise exception 'A saved card is required to rent an item.';
+  end if;
+
+  v_rent := v_l.rent_price_monthly;
+
+  insert into rentals (listing_id, listing_title, listing_price, renter_id, owner_id, card_id,
+                       monthly_rent, term_months, upfront_amount, start_date, rent_to_buy)
+  values (v_l.listing_id, v_l.title, v_l.price, v_uid, v_l.seller_id, p_card_id,
+          v_rent, p_term_months,
+          case when p_term_months >= 3 then v_rent * 3 else v_rent end,
+          v_start,
+          v_l.rent_to_buy_enabled and p_term_months > 6)
+  returning rental_id into v_rental;
+
+  if p_term_months >= 3 then
+    foreach k in array array[1, 2, p_term_months] loop
+      insert into rental_charges (rental_id, rent_month, period_start, charge_date, amount, kind, status, paid_at)
+      values (v_rental, k, (v_start + make_interval(months => k - 1))::date, v_start,
+              v_rent, 'upfront', 'paid', now());
+    end loop;
+    for k in 3 .. p_term_months - 1 loop
+      insert into rental_charges (rental_id, rent_month, period_start, charge_date, amount, kind)
+      values (v_rental, k, (v_start + make_interval(months => k - 1))::date,
+              (v_start + make_interval(months => k - 2))::date, v_rent, 'monthly');
+    end loop;
+  else
+    for k in 1 .. p_term_months loop
+      insert into rental_charges (rental_id, rent_month, period_start, charge_date, amount, kind, status, paid_at)
+      values (v_rental, k, (v_start + make_interval(months => k - 1))::date,
+              (v_start + make_interval(months => k - 1))::date, v_rent,
+              case when k = 1 then 'upfront' else 'monthly' end,
+              case when k = 1 then 'paid' else 'scheduled' end,
+              case when k = 1 then now() else null end);
+    end loop;
+  end if;
+
+  for k in 1 .. p_term_months loop
+    insert into rental_payouts (rental_id, rent_month, release_date, amount)
+    values (v_rental, k, (v_start + make_interval(months => k))::date, v_rent);
+  end loop;
+
+  update listings set status = 'rented', updated_at = now() where listing_id = v_l.listing_id;
+  return v_rental;
+end $$;
+
+-- buyout_rental — unchanged except the added admin guard after the login check.
+-- (Admins can never reach this anyway since start_rental now blocks them from
+-- ever having a rental, but it's guarded directly too, defense in depth.)
+create or replace function public.buyout_rental(p_rental_id uuid, p_card_id uuid default null)
+returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  r rentals%rowtype;
+  v_today date;
+  v_paid numeric;
+  v_released numeric;
+  v_held numeric;
+  v_balance numeric;
+  v_order uuid;
+begin
+  if v_uid is null then raise exception 'Please log in first.'; end if;
+  if public.is_admin() then raise exception 'Admin accounts cannot make purchases.'; end if;
+
+  select * into r from rentals where rental_id = p_rental_id for update;
+  if not found or r.renter_id <> v_uid then raise exception 'Only the renter can buy this item.'; end if;
+  if r.status <> 'active' then raise exception 'This rental is no longer active.'; end if;
+  if not r.rent_to_buy then raise exception 'This rental is not a rent-to-buy rental.'; end if;
+  if exists (select 1 from rental_issues where rental_id = r.rental_id and status = 'reported') then
+    raise exception 'Buy-out is paused while a problem report is being investigated.';
+  end if;
+
+  perform public.process_rental_ledger(r.rental_id);
+
+  v_today := current_date + r.demo_offset_days;
+  if v_today < (r.start_date + make_interval(months => 6))::date then
+    raise exception 'The buy-out opens after month 6 of the rental.';
+  end if;
+
+  select coalesce(sum(amount), 0) into v_paid from rental_charges where rental_id = r.rental_id and status = 'paid';
+  select coalesce(sum(amount), 0) into v_released from rental_payouts where rental_id = r.rental_id and status = 'released';
+  v_held := v_paid - v_released;
+  v_balance := greatest(r.listing_price - v_paid, 0);
+
+  if v_balance > 0 and not exists (select 1 from saved_cards where card_id = p_card_id and user_id = v_uid) then
+    raise exception 'Please choose a valid card.';
+  end if;
+
+  insert into orders (buyer_id, seller_id, total_amount, status)
+  values (v_uid, r.owner_id, r.listing_price, 'completed')
+  returning order_id into v_order;
+
+  insert into order_items (order_id, listing_id, quantity, unit_price, subtotal)
+  values (v_order, r.listing_id, 1, r.listing_price, r.listing_price);
+
+  if v_balance > 0 then
+    insert into payments (order_id, amount, payment_method, payment_reference, status)
+    values (v_order, v_balance, 'card', 'DEMO-BUYOUT-' || upper(substr(md5(random()::text), 1, 8)), 'completed');
+  end if;
+
+  update rental_charges set status = 'cancelled' where rental_id = r.rental_id and status = 'scheduled';
+  update rental_payouts set status = 'cancelled' where rental_id = r.rental_id and status = 'scheduled';
+
+  insert into rental_charges (rental_id, rent_month, period_start, charge_date, amount, kind, status, paid_at)
+  values (r.rental_id, 0, v_today, v_today, v_balance, 'buyout', 'paid', now());
+
+  insert into rental_payouts (rental_id, rent_month, release_date, amount, kind, status, released_at)
+  values (r.rental_id, 0, v_today, v_held + v_balance, 'buyout', 'released', now());
+
+  update rentals set status = 'bought' where rental_id = r.rental_id;
+  update listings set status = 'sold', updated_at = now() where listing_id = r.listing_id;
+  return v_order;
+end $$;
