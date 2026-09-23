@@ -595,8 +595,7 @@ button {
   overflow: hidden;
 }
 
-.login-brand,
-.login-tagline {
+.login-brand {
   position: relative;
   z-index: 1;
 }
@@ -626,17 +625,11 @@ button {
   margin-top: 10px;
 }
 
-.login-tagline h2 {
+.login-brand h2.login-tagline {
   font-size: 22px;
   line-height: 1.35;
-  margin: 0 0 14px;
-}
-
-.login-tagline p {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #dbeafe;
-  max-width: 320px;
+  margin: 16px 0 0;
+  font-weight: 600;
 }
 
 .login-form-side {

@@ -13,14 +13,7 @@ export default function LoginCard({ message, error, defaultMode = 'login' }) {
         <div className="login-brand">
           <img src="/crest.png" alt="University crest" className="crest-logo" />
           <h1>Campus Connect</h1>
-        </div>
-
-        <div className="login-tagline">
-          <h2>Your campus, your resources,<br />all in one place.</h2>
-          <p>
-            Buy and sell with other students, keep track of your bookings, and
-            get everything your campus has to offer — all from one account.
-          </p>
+          <h2 className="login-tagline">Your campus, your resources,<br />all in one place.</h2>
         </div>
       </div>
 
